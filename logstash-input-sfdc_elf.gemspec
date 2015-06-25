@@ -4,8 +4,8 @@ Gem::Specification.new do |s|
   s.licenses        = ['MIT'] # TODO(abisek) Discuss license type with legal
   s.summary         = "A Logstash plugin the receives events from Salesforce's Event Log File"
   s.description     = "This gem is a logstash plugin required to be installed on top of the Logstash core pipeline using $LS_HOME/bin/plugin install gemname. This gem is not a stand-alone program"
-  s.authors         = ["Abhishek Sreenivasa"]
-  s.email           = 'abisek@gmail.com'
+  s.authors         = ["Abhishek Sreenivasa", "Mohammed Islam"]
+  s.email           = %w(abisek@gmail.com mislam@salesforce.com)
   s.homepage        = "http://www.salesforce.com" # TODO(abisek) Update homepage
   s.require_paths   = ["lib"]
 
