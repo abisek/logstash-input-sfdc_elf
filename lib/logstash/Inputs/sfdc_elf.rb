@@ -5,8 +5,9 @@ require 'logstash/namespace'
 require 'stud/interval'
 require 'databasedotcom'
 require 'csv'
-require 'time'
-require 'tempfile'
+# require 'time'
+# require 'tempfile'
+# require 'digest/md5' #todo why dont i need to require these's?? is it becasuse of :: thingy??
 
 class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
 
@@ -15,7 +16,6 @@ class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
   QUOTE_CHAR = '"'
 
   config_name 'sfdc_elf'
-
   default :codec, 'plain'
 
   config :username, :validate => :string, :required => true
@@ -36,61 +36,74 @@ class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
     # Authenticate the client
     authenticate
 
+    # Done list will contain all CSV files that have been read before, prevent duplication of data.
+    # This is done using MD5 hash, where it parases a file and generates a unique hexadecimal value for it.
+    @done_list = []  #todo load done_list from .db if there is one....
+
   end # def register
 
   public
   def run(queue)
     begin
 
-      # List of Sobjects, specifically EventLogFiles
-      query_result = @client.query('select id, eventtype, logfile from EventLogFile')
+      (0..2).each do
 
-      # Grab a list of Tempfiles that contains CSV file data
-      tempfile_list = get_csv_files(query_result)
+        # Grab a list of Sobjects, specifically EventLogFiles
+        query_result = @client.query('select id, eventtype, logfile from EventLogFile')
 
-      if !tempfile_list.empty?
-        tempfile_list.each do |tmp|
+        # Grab a list of Tempfiles that contains CSV file data
+        tempfile_list = get_csv_files(query_result)
 
-          # Break csv file into to parts, key and value, which is stored in an array
-          key_value_arry = tmp.lines.to_a
-
-          # Close tmp file and unlink it, doing this will delete the actual tempfile
-          tmp.close
-          tmp.unlink
-
-          # Pass data to filter and it will return an event
-          queue << csv_filter(key_value_arry[0], key_value_arry[1])
-
+        if tempfile_list.empty? #TODO Should I logger this?? or move it up for query_result
+          @logger.error('MO: no csv files!!')
         end
-      end
+
+        tempfile_list.each do |tmp|
+          if !has_been_read_before(tmp)
+            # Break CSV file into to two parts, key and value, which is stored in an array
+            key_value_arry = tmp.readlines.to_a
+
+            # Close tmp file and unlink it, doing this will delete the actual tempfile
+            tmp.close
+            tmp.unlink
+
+            # Pass both data to csv_filter and it will return an event
+            queue << csv_filter(key_value_arry[0], key_value_arry[1])
+          end
+        end
+
+      end # do loop
 
 
     rescue Databasedotcom::SalesForceError => e
 
       # Session has expired. Force user logout. Then re-authenticate
-      if e.message == "Session expired or invalid"
+      if e.message == 'Session expired or invalid'
         authenticate
       else
         raise e
       end
 
     end # rescue / begin
-  end # def run
+  end
 
-
+  #
   # This helper method is called whenever initaialize the client object or whenever the
   # client token expires.
+  #
   def authenticate
     @client.authenticate username: @username, password: @password + @security_token
-  end # def authenticate
+  end
 
-
+  #
   # This helper method takes as input a key data and val data that is in CSV format. Using
   # CSV.parse_line we will get back an array for each then one of them. Then create a new
   # Event object where we will place all of the key value pairs into the Event object and then
   # return it.
-
+  #
   # TODO: event.timestamp     = Time.strptime(values[i], 'YYYYMMddHHmmss.SSS').utc.iso8601
+  #
+
   def csv_filter(key_data, val_data)
 
     # Initaialize event to be used. @timestamp and @version is automatically added
@@ -129,9 +142,9 @@ class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
       event.tag '_csvparsefailure' #TODO: do I need this try catch??
       return
     end # begin
-  end # def csvFilter
+  end
 
-
+  #
   # This helper method takes as input a list/collection of Sobjects which each
   # contains a path to their respective CSV files. The path is stored in the
   # LogFile field. Using that path, we are able to grab the actual CSV file via
@@ -143,6 +156,7 @@ class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
   # Tempfile and then close it and unlink it, which will delete the file.
   #
   # Note: for debugging tmp.path will help find the path where the Tempfile is stored.
+  #
 
   def get_csv_files(csv_path_list)
 
@@ -171,7 +185,24 @@ class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
     # Return the result list
     result
 
-  end # def get_csv_files
+  end
 
+
+  def has_been_read_before(tmp)
+    md5 = Digest::MD5.new
+    md5.update(tmp.read)
+    hex = md5.hexdigest
+
+    if @done_list.member?(hex)
+      @logger.error('MO: this csv file has been read before')
+      tmp.close
+      tmp.unlink
+      true
+    else
+      @done_list << hex
+      tmp.rewind
+      false
+    end
+  end
 
 end # class LogStash::Inputs::File
