@@ -1,17 +1,16 @@
 # encoding: utf-8
-require "logstash/inputs/base"
-require "logstash/namespace"
+require 'logstash/inputs/base'
+require 'logstash/namespace'
 
-require "stud/interval"
-require "databasedotcom"
-require "csv"
-require "time"
+require 'stud/interval'
+require 'databasedotcom'
+require 'csv'
+require 'time'
+require 'tempfile'
 
 class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
 
   # Constants
-  VALUE = 'value'
-  KEY = 'key'
   SEPARATOR = ','
   QUOTE_CHAR = '"'
 
@@ -43,21 +42,26 @@ class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
   def run(queue)
     begin
 
-      # List of EventLogFiles
+      # List of Sobjects, specifically EventLogFiles
       query_result = @client.query('select id, eventtype, logfile from EventLogFile')
 
-      if !query_result.empty?
+      # Grab a list of Tempfiles that contains CSV file data
+      tempfile_list = get_csv_files(query_result)
 
-        # Get the first LogFile
-        log_file_path = query_result.first.LogFile
+      if !tempfile_list.empty?
+        tempfile_list.each do |tmp|
 
-        # Get csv file from a LogFile, which is located in the body of http request
-        http_result = @client.http_get(log_file_path)
-        kvArray = http_result.body.lines.to_a
+          # Break csv file into to parts, key and value, which is stored in an array
+          key_value_arry = tmp.lines.to_a
 
-        # Pass data to filter and it will return an event
-        queue << csv_filter(kvArray[0], kvArray[1])
+          # Close tmp file and unlink it, doing this will delete the actual tempfile
+          tmp.close
+          tmp.unlink
 
+          # Pass data to filter and it will return an event
+          queue << csv_filter(key_value_arry[0], key_value_arry[1])
+
+        end
       end
 
 
@@ -74,13 +78,19 @@ class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
   end # def run
 
 
-
+  # This helper method is called whenever initaialize the client object or whenever the
+  # client token expires.
   def authenticate
     @client.authenticate username: @username, password: @password + @security_token
   end # def authenticate
 
 
+  # This helper method takes as input a key data and val data that is in CSV format. Using
+  # CSV.parse_line we will get back an array for each then one of them. Then create a new
+  # Event object where we will place all of the key value pairs into the Event object and then
+  # return it.
 
+  # TODO: event.timestamp     = Time.strptime(values[i], 'YYYYMMddHHmmss.SSS').utc.iso8601
   def csv_filter(key_data, val_data)
 
     # Initaialize event to be used. @timestamp and @version is automatically added
@@ -91,17 +101,24 @@ class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
       keys    = CSV.parse_line(key_data, :col_sep => SEPARATOR, :quote_char => QUOTE_CHAR)
       values  = CSV.parse_line(val_data, :col_sep => SEPARATOR, :quote_char => QUOTE_CHAR)
 
-      # Create key value pair
+      # Add key value pair to event
       values.each_index do |i|
+
+        # Grab current key
         field_name = keys[i]
 
-        # Format @timestamp field to iso8601 when TIMESTAMP is up, otherwise leave everything else as is
+        # Handle when field_name is 'TIMESTAMP', otherwise simply add the key value pair
         if field_name == 'TIMESTAMP'
 
-          # event.timestamp     = Time.strptime(values[i], 'YYYYMMddHHmmss.SSS').utc.iso8601
-          event[field_name]   = Time.parse(values[i]).utc.iso8601
+          # Add 'TIMESTAMP' key and map to the current value which is the actual time on the CSV file
+          # in this format 'YYYYMMddHHmmss.SSS'
           event[field_name]   = values[i]
+
+          # Change the @timestamp field to the actual time on the CSV file, but convert it to iso8601
+          event.timestamp     = Time.parse(values[i]).utc.iso8601
+
         else
+          # Add key value to event
           event[field_name] = values[i]
         end
       end
@@ -109,27 +126,52 @@ class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
       event
 
     rescue => e
-      event.tag "_csvparsefailure"
+      event.tag '_csvparsefailure' #TODO: do I need this try catch??
       return
     end # begin
   end # def csvFilter
 
 
-
-  # def get_csv_files(list)
+  # This helper method takes as input a list/collection of Sobjects which each
+  # contains a path to their respective CSV files. The path is stored in the
+  # LogFile field. Using that path, we are able to grab the actual CSV file via
+  # @client.http_get method.
   #
-  #   # Get the first LogFile
-  #   log_file_path = list.first.LogFile
+  # After grabbing the CSV file we then store them using the standard Tempfile library.
+  # Tempfile will create a unique file each time using 'sfdc_elf' as the beginning and
+  # finally we will be returning a list of Tempfile object, where the user can read the
+  # Tempfile and then close it and unlink it, which will delete the file.
   #
-  #   # Get csv file from a LogFile, which is located in the body of http request
-  #   http_result = @client.http_get(log_file_path)
-  #
-  #
-  # end # def get_csv_files
+  # Note: for debugging tmp.path will help find the path where the Tempfile is stored.
 
+  def get_csv_files(csv_path_list)
 
+    result =[]
 
+    csv_path_list.each do |csv_path|
 
+      # Get the csv_path from the LogFile field, then do http get
+      http_result = @client.http_get(csv_path.LogFile)
+
+      # Create Tempfile and write the body of the http_result, which contains the csv data, to a buffer.
+      tmp = Tempfile.new('sfdc_elf')
+      tmp.write(http_result.body)
+
+      # Flushing will write the buffer into the Tempfile itself.
+      tmp.flush
+
+      # Rewind will move the file pointer from the end to the beginning of the file, so that users can simple call
+      # the Read methods without having to called rewind each time.
+      tmp.rewind
+
+      # Append the Tempfile object into the result list
+      result << tmp
+    end
+
+    # Return the result list
+    result
+
+  end # def get_csv_files
 
 
 end # class LogStash::Inputs::File
