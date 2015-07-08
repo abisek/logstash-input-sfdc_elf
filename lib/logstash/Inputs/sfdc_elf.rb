@@ -3,17 +3,15 @@ require 'logstash/inputs/base'
 require 'logstash/namespace'
 
 require 'stud/interval'
-require 'databasedotcom'
 require 'csv'
-# require 'time'
-# require 'tempfile'
-# require 'digest/md5' #todo why dont i need to require these's?? is it becasuse of :: thingy??
+require_relative '../../logstash/Inputs/client_with_streaming_support'
 
-class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
+class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
 
   # Constants
   SEPARATOR = ','
   QUOTE_CHAR = '"'
+  DEFAULT_TIME = '0001-01-01T00:00:00Z'
 
   config_name 'sfdc_elf'
   default :codec, 'plain'
@@ -28,30 +26,41 @@ class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
   def register
 
     # Initaialize client
-    @client = Databasedotcom::Client.new
+    @client = ClientWithStreamingSupport.new
     @client.client_id = '3MVG9xOCXq4ID1uGlgyzp8E4HEHfzI4iryotXS3FtHQIZ5VYhE8.JPehyksO.uYZmZHct.xlXVxqDCih35j0.'
     @client.client_secret = '7829455833495769170'
     @client.version = '33.0'
 
     # Authenticate the client
-    authenticate
+    authenticate()
 
-    # Done list will contain all CSV files that have been read before, prevent duplication of data.
-    # This is done using MD5 hash, where it parases a file and generates a unique hexadecimal value for it.
-    @done_list = []  #todo load done_list from .db if there is one....
+    # if File.exist?('sfdc_info')
+    #
+    # else
+    #      File.open('sfdc_info', 'w')
+    # end
+
+
+    @last_read_instant = DEFAULT_TIME
+
 
   end # def register
+
+
 
   public
   def run(queue)
     begin
 
-      (0..2).each do
+      (0..1).each do
 
-        # Grab a list of Sobjects, specifically EventLogFiles
-        query_result = @client.query('select id, eventtype, logfile from EventLogFile')
+        # Grab a list of Sobjects, specifically EventLogFiles.
+        query_result = @client.query("SELECT id, eventtype, logfile FROM EventLogFile WHERE LogDate > #{@last_read_instant}")
+        @last_read_instant = Time.now.utc.iso8601.to_s
 
-        # Grab a list of Tempfiles that contains CSV file data
+        @logger.error('MO: ' << query_result.size.to_s)
+
+        # Grab a list of Tempfiles that contains CSV file data.
         tempfile_list = get_csv_files(query_result)
 
         if tempfile_list.empty? #TODO Should I logger this?? or move it up for query_result
@@ -59,17 +68,22 @@ class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
         end
 
         tempfile_list.each do |tmp|
-          if !has_been_read_before(tmp)
-            # Break CSV file into to two parts, key and value, which is stored in an array
-            key_value_arry = tmp.readlines.to_a
 
-            # Close tmp file and unlink it, doing this will delete the actual tempfile
-            tmp.close
-            tmp.unlink
+          # Get the column from Tempfile, which is in the first line and in CSV format, then parse it. It will return an array.
+          column = CSV.parse_line(tmp.readline, :col_sep => SEPARATOR, :quote_char => QUOTE_CHAR)
 
-            # Pass both data to csv_filter and it will return an event
-            queue << csv_filter(key_value_arry[0], key_value_arry[1])
+          tmp.each_line do |data|
+            # Parse the current line, it will return an array.
+            parsed_data = CSV.parse_line(data, :col_sep => SEPARATOR, :quote_char => QUOTE_CHAR)
+
+            # create_event will return a event object.
+            queue << create_event(column, parsed_data)
           end
+
+          # Close tmp file and unlink it, doing this will delete the actual tempfile.
+          tmp.close
+          tmp.unlink
+
         end
 
       end # do loop
@@ -87,13 +101,19 @@ class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
     end # rescue / begin
   end
 
+
+
   #
   # This helper method is called whenever initaialize the client object or whenever the
   # client token expires.
   #
+
+  private
   def authenticate
     @client.authenticate username: @username, password: @password + @security_token
   end
+
+
 
   #
   # This helper method takes as input a key data and val data that is in CSV format. Using
@@ -104,45 +124,37 @@ class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
   # TODO: event.timestamp     = Time.strptime(values[i], 'YYYYMMddHHmmss.SSS').utc.iso8601
   #
 
-  def csv_filter(key_data, val_data)
+  private
+  def create_event(column, data)
 
     # Initaialize event to be used. @timestamp and @version is automatically added
     event = LogStash::Event.new()
 
-    begin
-      # Parse the key and value data into an array
-      keys    = CSV.parse_line(key_data, :col_sep => SEPARATOR, :quote_char => QUOTE_CHAR)
-      values  = CSV.parse_line(val_data, :col_sep => SEPARATOR, :quote_char => QUOTE_CHAR)
+    # Add key value pair to event
+    data.each_index do |i|
 
-      # Add key value pair to event
-      values.each_index do |i|
+      # Grab current key
+      column_name = column[i]
 
-        # Grab current key
-        field_name = keys[i]
+      # Handle when field_name is 'TIMESTAMP', otherwise simply add the key value pair
+      if column_name == 'TIMESTAMP'
 
-        # Handle when field_name is 'TIMESTAMP', otherwise simply add the key value pair
-        if field_name == 'TIMESTAMP'
+        # Add 'TIMESTAMP' key, then map it to the current value which is the actual time on the CSV file in this format 'YYYYMMddHHmmss.SSS'
+        event[column_name]  = data[i]
 
-          # Add 'TIMESTAMP' key and map to the current value which is the actual time on the CSV file
-          # in this format 'YYYYMMddHHmmss.SSS'
-          event[field_name]   = values[i]
+        # Change the @timestamp field to the actual time on the CSV file, but convert it to iso8601
+        event.timestamp     = Time.parse(data[i]).utc.iso8601
 
-          # Change the @timestamp field to the actual time on the CSV file, but convert it to iso8601
-          event.timestamp     = Time.parse(values[i]).utc.iso8601
-
-        else
-          # Add key value to event
-          event[field_name] = values[i]
-        end
+      else
+        # Add key value to event
+        event[column_name] = data[i]
       end
+    end
 
-      event
-
-    rescue => e
-      event.tag '_csvparsefailure' #TODO: do I need this try catch??
-      return
-    end # begin
+    event
   end
+
+
 
   #
   # This helper method takes as input a list/collection of Sobjects which each
@@ -158,24 +170,22 @@ class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
   # Note: for debugging tmp.path will help find the path where the Tempfile is stored.
   #
 
+  private
   def get_csv_files(csv_path_list)
 
     result =[]
-
     csv_path_list.each do |csv_path|
-
-      # Get the csv_path from the LogFile field, then do http get
-      http_result = @client.http_get(csv_path.LogFile)
 
       # Create Tempfile and write the body of the http_result, which contains the csv data, to a buffer.
       tmp = Tempfile.new('sfdc_elf')
-      tmp.write(http_result.body)
+
+      # Get the csv_path from the LogFile field, then do http get
+      @client.streaming_download(csv_path.LogFile, tmp)
 
       # Flushing will write the buffer into the Tempfile itself.
       tmp.flush
 
-      # Rewind will move the file pointer from the end to the beginning of the file, so that users can simple call
-      # the Read methods without having to called rewind each time.
+      # Rewind will move the file pointer from the end to the beginning of the file, so that users can simple call the Read method
       tmp.rewind
 
       # Append the Tempfile object into the result list
@@ -185,24 +195,6 @@ class LogStash::Inputs::Sfdc_elf < LogStash::Inputs::Base
     # Return the result list
     result
 
-  end
-
-
-  def has_been_read_before(tmp)
-    md5 = Digest::MD5.new
-    md5.update(tmp.read)
-    hex = md5.hexdigest
-
-    if @done_list.member?(hex)
-      @logger.error('MO: this csv file has been read before')
-      tmp.close
-      tmp.unlink
-      true
-    else
-      @done_list << hex
-      tmp.rewind
-      false
-    end
   end
 
 end # class LogStash::Inputs::File
