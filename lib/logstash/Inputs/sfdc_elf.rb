@@ -17,8 +17,9 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   default :codec, 'plain'
 
   config :username, :validate => :string, :required => true
-  config :password, :validate => :string, :required => true       # todo need to change validate to :password
-  config :security_token, :validate => :string, :required => true # todo need to change validate to :password
+  config :password, :validate => :string, :required => true       # todo might need to change validate to :password
+  config :security_token, :validate => :string, :required => true # todo might need to change validate to :password
+  config :sfdc_info_path, :validate => :string, :default => Dir.home
   config :poll_interval_in_hours, :validate => :number, :default => 24
 
 
@@ -32,19 +33,30 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
     @client.version = '33.0'
 
     # Authenticate the client
-    authenticate()
+    authenticate
 
-    # if File.exist?('sfdc_info')
-    #
-    # else
-    #      File.open('sfdc_info', 'w')
-    # end
+    # Set @sfdc_info_path to home directory if provided path does not exist.
+    @sfdc_info_path = Dir.home unless File.directory?(@sfdc_info_path)
 
+    @path = "#{@sfdc_info_path}/.sfdc_info"
 
-    @last_read_instant = DEFAULT_TIME
+    if File.exist?(@path)
+      #todo add logging at crital points via info
 
+      @last_read_instant = File.read(@path)
+      @logger.error('MO: exist')
+    else
+      @last_read_instant = DEFAULT_TIME
+
+      @logger.error('MO: does NOT exist')
+      f = File.open(@path, 'w')
+      f.write(@last_read_instant)
+      f.flush
+      f.close
+    end
 
   end # def register
+
 
 
 
@@ -52,41 +64,50 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   def run(queue)
     begin
 
-      (0..1).each do
+      # (0..1).each do
 
-        # Grab a list of Sobjects, specifically EventLogFiles.
-        query_result = @client.query("SELECT id, eventtype, logfile FROM EventLogFile WHERE LogDate > #{@last_read_instant}")
-        @last_read_instant = Time.now.utc.iso8601.to_s
+        current_time = Time.now.utc.iso8601.to_s
 
-        @logger.error('MO: ' << query_result.size.to_s)
+        # if @last_read_instant < current_time # compare if its the same day or compare against poll_interval_in_hours
 
-        # Grab a list of Tempfiles that contains CSV file data.
-        tempfile_list = get_csv_files(query_result)
+          # Grab a list of Sobjects, specifically EventLogFiles.
+          query_result = @client.query("SELECT id, eventtype, logfile FROM EventLogFile WHERE LogDate > #{@last_read_instant} ORDER BY LogDate ASC ")
+          @last_read_instant = current_time
 
-        if tempfile_list.empty? #TODO Should I logger this?? or move it up for query_result
-          @logger.error('MO: no csv files!!')
-        end
-
-        tempfile_list.each do |tmp|
-
-          # Get the column from Tempfile, which is in the first line and in CSV format, then parse it. It will return an array.
-          column = CSV.parse_line(tmp.readline, :col_sep => SEPARATOR, :quote_char => QUOTE_CHAR)
-
-          tmp.each_line do |data|
-            # Parse the current line, it will return an array.
-            parsed_data = CSV.parse_line(data, :col_sep => SEPARATOR, :quote_char => QUOTE_CHAR)
-
-            # create_event will return a event object.
-            queue << create_event(column, parsed_data)
+          if query_result.empty? #TODO Should I logger this?? or move it up for query_result
+            @logger.info('MO: query result is empty')
+            # next
           end
 
-          # Close tmp file and unlink it, doing this will delete the actual tempfile.
-          tmp.close
-          tmp.unlink
+          f = File.open(@path, 'w')
+          f.write(@last_read_instant)
+          f.flush
+          f.close
 
-        end
+          # Grab a list of Tempfiles that contains CSV file data.
+          tempfile_list = get_csv_files(query_result)
 
-      end # do loop
+          tempfile_list.each do |tmp|
+
+            # Get the column from Tempfile, which is in the first line and in CSV format, then parse it. It will return an array.
+            column = CSV.parse_line(tmp.readline, :col_sep => SEPARATOR, :quote_char => QUOTE_CHAR)
+
+            tmp.each_line do |data|
+              # Parse the current line, it will return an array.
+              parsed_data = CSV.parse_line(data, :col_sep => SEPARATOR, :quote_char => QUOTE_CHAR)
+
+              # create_event will return a event object.
+              queue << create_event(column, parsed_data)
+            end
+
+            # Close tmp file and unlink it, doing this will delete the actual tempfile.
+            tmp.close
+            tmp.unlink
+          end
+
+        # end
+
+      # end # do loop
 
 
     rescue Databasedotcom::SalesForceError => e
@@ -137,18 +158,10 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
       column_name = column[i]
 
       # Handle when field_name is 'TIMESTAMP', otherwise simply add the key value pair
-      if column_name == 'TIMESTAMP'
+      # Change the @timestamp field to the actual time on the CSV file, but convert it to iso8601
+      event.timestamp = Time.parse(data[i]).utc.iso8601 if column_name == 'TIMESTAMP'
 
-        # Add 'TIMESTAMP' key, then map it to the current value which is the actual time on the CSV file in this format 'YYYYMMddHHmmss.SSS'
-        event[column_name]  = data[i]
-
-        # Change the @timestamp field to the actual time on the CSV file, but convert it to iso8601
-        event.timestamp     = Time.parse(data[i]).utc.iso8601
-
-      else
-        # Add key value to event
-        event[column_name] = data[i]
-      end
+      event[column_name] = data[i]
     end
 
     event
@@ -171,7 +184,8 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   #
 
   private
-  def get_csv_files(csv_path_list)
+  def get_csv_files(csv_path_list) #todo add try catch
+    #todo isolate failes from one another, example large file
 
     result =[]
     csv_path_list.each do |csv_path|
