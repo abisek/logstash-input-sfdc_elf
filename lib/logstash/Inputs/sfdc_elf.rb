@@ -40,12 +40,14 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   config :sfdc_info_path, :validate => :string, :default => Dir.home
 
   # How often this plugin should grab new data.
-  config :poll_interval_in_hours, :validate => :number, :default => 24 #todo range, poll intervals 6 to 24
+  config :poll_interval_in_hours, :validate => [*6..24], :default => 24
 
+
+  # The first part of logstash pipeline is register, where all instance variables are initialized.
 
   public
   def register
-    # Initaialize client
+    # Initialize client
     @client = ClientWithStreamingSupport.new
     @client.client_id = '3MVG9xOCXq4ID1uGlgyzp8E4HEHfzI4iryotXS3FtHQIZ5VYhE8.JPehyksO.uYZmZHct.xlXVxqDCih35j0.'
     @client.client_secret = '7829455833495769170'
@@ -55,20 +57,19 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
     authenticate
 
     # Save org id to distinguish between multiple orgs.
-    #todo do i really need this?? only used it to create @path variable
     # @org_id = @client.org_id #todo why doesnt this work???
-    @org_id = @client.query("select id from Organization")[0]["Id"]
+    @org_id = @client.query('select id from Organization')[0]['Id']    #todo do i really need this?? only used it to create @path variable
 
     # Set up time interval for forever while loop.
     # @interval = @poll_interval_in_hours * 3600
-    @interval = 30
+    @interval = 60
 
     # Set @sfdc_info_path to home directory if provided path from config does not exist.
     @sfdc_info_path = Dir.home unless File.directory?(@sfdc_info_path)
 
     # Generate the path using org_id to keep track of the last read log file date based on the org rather than users.
     @path = "#{@sfdc_info_path}/.#{FILE_PREFIX}_#{@org_id}"
-    @logger.info("#{LOG_KEY}: genarted path = #{@path}")
+    @logger.info("#{LOG_KEY}: generated path = #{@path}")
 
     # Read from .sfdc_info if it exists, otherwise load @last_read_log_date with DEFAULT_TIME.
     if File.exist?(@path)
@@ -80,7 +81,7 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
       # Load default time to ensure getting all possible EventLogFiles from oldest to current.
       # Note in create_event_list(), which is called in run(), is where .sfdc_info is created or overwritten, so no need to create it here.
       @last_read_log_date = DEFAULT_TIME
-      @logger.info('MO: .sfdc_info does not exist and loaded DEFAULT_TIME to @last_read_instant')
+      @logger.info("#{LOG_KEY}: .sfdc_elf_logstatsh does not exist and loaded DEFAULT_TIME to @last_read_instant")
     end
 
     @logger.info("#{LOG_KEY}: @last_read_instant =  #{@last_read_log_date}")
@@ -88,6 +89,7 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
 
   # def register
 
+  # The second part of logstash pipeline is run, where it expects to have event objects generated and passed into the queue.
 
   public
   def run(queue)
@@ -103,14 +105,11 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
         query_result_list = @client.query("SELECT Id, EventType, Logfile, LogDate FROM EventLogFile WHERE LogDate > #{@last_read_log_date} ORDER BY LogDate DESC ")
 
         if !query_result_list.empty?
+          # Creates events from query_result_list, then simply append the events to the queue.
           @logger.info("#{LOG_KEY}: query result is NOT empty, size = #{query_result_list.size.to_s}")
-
-          # Grab an list of events based on the query result. Then simply append the events to the queue.
-          @logger.info('MO: going into create_event_list')
-          event_list = create_event_list(query_result_list)
-          @logger.info('MO: going into create_event_list')
-          event_list.each do |event| queue << event end
+          enqueue_events(query_result_list, queue)
         else
+          # Make sure to save the last read LogDate even when query_result_list is empty
           @logger.info("#{LOG_KEY}: query result is empty")
           save_last_read_log_date(Time.now.utc.iso8601.to_s)
         end
@@ -138,8 +137,9 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   # def run
 
 
-  # This helper method is called whenever initaialize the client object or whenever the
-  # client token expires. It will attempt 3 times with a 30 second delay between each retry.
+  # This helper method is called whenever we need to initaialize the client object or whenever the
+  # client token expires. It will attempt 3 times with a 30 second delay between each retry. On the 3th try, if it
+  # fails the exception will be raised.
 
   private
   def authenticate
@@ -151,7 +151,7 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
         @logger.info("#{LOG_KEY}: client has been authenticated")
         break
       rescue Exception => e
-        # Sleep for 30 seconds.
+        # Sleep for 30 seconds 2 times. On the 3th time, raise the exception.
         unless (count == 2)
           @logger.error("#{LOG_KEY}: Failed to authenticate going to try again in 30 seconds")
           sleep(30)
@@ -166,20 +166,18 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   # Given a list of query result that are Sobjects, iterate through the list and grab all the CSV files that each
   # Sobject points to via get_csv_tempfile_list(). Once that is done we save the first LogDate in the list to the
   # @path file. After that we parse the CSV files parse it line by line and generate the events for the parsed CSV
-  # line, append it to a list and the finally return the event_list.
+  # line, append it to the queue.
   #
   # Note: when grabbing the CSV files, they are stored as Tempfiles and deleted after parsed.
 
   private
-  def create_event_list(query_result_list)
-    event_list = []
-
+  def enqueue_events(query_result_list, queue)
+    @logger.info("#{LOG_KEY}: enqueue events")
     # query_result_list is in descending order based on the LogDate, so grab the first one of the list and save the LogDate to @last_read_log_date and .sfdc_info
-    # @last_read_log_date = Time.parse(query_result_list.first.LogDate.to_s).utc.iso8601.to_s
     @last_read_log_date = Time.parse(query_result_list.first.LogDate.to_s).utc.iso8601.to_s
 
     # Overwrite the .sfdc_elf_logstash file with the @last_read_log_date.
-    save_last_read_log_date(@last_read_log_date)
+    save_last_read_log_date(@last_read_log_date) #todo might have to move this to the end of the method, incase of a crash in between.
 
     # Grab a list of Tempfiles that contains CSV file data.
     tempfile_list = get_csv_tempfile_list(query_result_list)
@@ -197,16 +195,13 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
         parsed_data = CSV.parse_line(data, :col_sep => SEPARATOR, :quote_char => QUOTE_CHAR)
 
         # create_event will return a event object.
-        event_list << create_event(column, parsed_data)
+        queue << create_event(column, parsed_data)
       end
 
       # Close tmp file and unlink it, doing this will delete the actual tempfile.
       tmp.close
       tmp.unlink
     end # do loop, tempfile_list
-
-    # Return event_list
-    event_list
   end # def create_event_list
 
 
@@ -247,7 +242,7 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   # @client.http_get method.
   #
   # After grabbing the CSV file we then store them using the standard Tempfile library.
-  # Tempfile will create a unique file each time using 'sfdc_elf' as the beginning and
+  # Tempfile will create a unique file each time using 'sfdc_elf_tempfile' as the prefix and
   # finally we will be returning a list of Tempfile object, where the user can read the
   # Tempfile and then close it and unlink it, which will delete the file.
   #
@@ -255,9 +250,8 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
 
   private
   def get_csv_tempfile_list(query_result_list)
-    #todo add try catch
     #todo isolate failes from one another, example large file
-
+    @logger.info("#{LOG_KEY}: generating tempfile list")
     result =[]
     query_result_list.each do |event_log_file|
 
@@ -268,7 +262,7 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
       # Flushing will write the buffer into the Tempfile itself.
       tmp.flush
 
-      # Rewind will move the file pointer from the end to the beginning of the file, so that users can simple call the Read method
+      # Rewind will move the file pointer from the end to the beginning of the file, so that users can simple call the Read method.
       tmp.rewind
 
       # Append the Tempfile object into the result list
@@ -279,11 +273,10 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
       # @logger.error('MO: LogFile = '   << event_log_file.LogFile)
       # @logger.error('MO: LogDate = '   << event_log_file.LogDate.to_s)
     end
-
-    # Return the result list
     result
-
   end # def get_csv_files
+
+
 
   # Take as input a time sting that is in iso8601 format. The overwrite .sfdc_elf_logstash with the time string,
   # because of the 'w' flag.
@@ -297,26 +290,41 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
     f.close
   end
 
+  # Given as input the next schedule time, stall_schedule() will decide if we need to sleep until the next
+  # schedule time or skip sleeping because of missing the next schedule time.
+  #
+  # For both examples, the time interval is 1 hour.
+  # Example 1:
+  # started time       = 1:00pm
+  # next_schedule_time = 2:00pm
+  # current_time       = 1:30pm
+  # In this example you will need to sleep for 30 mins, so you will be on schedule.
+  #
+  # Example 2:
+  # started time       = 1:00pm
+  # next_schedule_time = 2:00pm
+  # current_time       = 2:30pm
+  # In this example you will not be allowed to sleep, and will proceed to compute again since you missed the schedule time.
 
   private
   def stall_schedule(next_schedule_time)
     current_time = Time.now
-
     @logger.info("#{LOG_KEY}: time before sleep  = #{current_time.to_s}")
 
+    # Example 2 case from above.
     if current_time > next_schedule_time
       @logger.info("#{LOG_KEY}: missed next schedule time, proceeding to next task without sleeping")
       while current_time > next_schedule_time
         next_schedule_time += @interval
       end
+
+    # Example 1 case from above.
     else
       @logger.info("#{LOG_KEY}: sleeping for #{(next_schedule_time - current_time).to_s} seconds")
       sleep(next_schedule_time - current_time)
       next_schedule_time += @interval
-
     end
     @logger.info("#{LOG_KEY} time after sleep   = #{Time.now.to_s}")
-
     next_schedule_time
   end # def determine_loop_stall
 
