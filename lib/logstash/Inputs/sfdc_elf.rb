@@ -2,27 +2,27 @@
 require 'logstash/inputs/base'
 require 'logstash/namespace'
 
-require 'stud/interval'
 require 'csv'
-require_relative '../../logstash/Inputs/client_with_streaming_support'
+require_relative 'client_with_streaming_support'
 
 
-# This plugin enables Salesforce customers to use ELK stack as there choice of exploration and visualization of their
-# EventLogFile(ELF) data from their Force.com ordinations.
-#
-# The plugin will handle downloading ELF CSV file and parsing them, any schema changes transparently, and event
-# deduplication.
+# This plugin enables Salesforce customers to load EventLogFile(ELF) data from their Force.com orgs.
+# The plugin will handle downloading ELF CSV file, parsing them, and handling any schema changes transparently.
 class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
 
   # Constants
-  SEPARATOR = ','
-  QUOTE_CHAR = '"'
-  DEFAULT_TIME = '0001-01-01T00:00:00Z'
-  FILE_PREFIX = 'sfdc_elf_logstash'
-  LOG_KEY = 'SFDC'
+  SEPARATOR      = ','
+  QUOTE_CHAR     = '"'
+  DEFAULT_TIME   = '0001-01-01T00:00:00Z'
+  FILE_PREFIX    = 'sfdc_elf_logstash'
+  LOG_KEY        = 'SFDC'
+  RETRY_ATTEMPTS = 3
+
 
   config_name 'sfdc_elf'
   default :codec, 'plain'
+
+  #todo how to publish doc to logstash
 
   # Username to your Force.com organization.
   config :username, :validate => :string, :required => true
@@ -33,14 +33,18 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   # Security token to you Force.com organization, can be found in My Settings > Personal > Reset My Security Token. Then
   # it will take you to "Reset My Security Token" page, and click on the "Reset Security Token" button. The token will
   # be emailed to you.
+  # Todo make make a simple .gif that shows this process? and attach it?
   config :security_token, :validate => :password, :required => true
 
   # The path to the .sfdc_info to use as an input. You set the path like so, `/var/log` Paths must be absolute and
   # cannot be relative.
+  # todo: abi..
   config :sfdc_info_path, :validate => :string, :default => Dir.home
 
   # How often this plugin should grab new data.
   config :poll_interval_in_hours, :validate => [*6..24], :default => 24
+
+
 
 
   # The first part of logstash pipeline is register, where all instance variables are initialized.
@@ -49,27 +53,32 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   def register
     # Initialize client
     @client = ClientWithStreamingSupport.new
-    @client.client_id = '3MVG9xOCXq4ID1uGlgyzp8E4HEHfzI4iryotXS3FtHQIZ5VYhE8.JPehyksO.uYZmZHct.xlXVxqDCih35j0.'
-    @client.client_secret = '7829455833495769170'
+
+    # Do not change id and secret. Currently pointing to "Event Log File Logstash Plugin," a long running app for this plugin.
+    @client.client_id = '3MVG9xOCXq4ID1uGlgyzp8E4HENTnwB05RL1qOmas88eMfE0mk7h0duhs3EnEY2v7Khs9aUXQnrUdB_wm.yJx'
+    @client.client_secret = '5847713965780458928'
     @client.version = '33.0'
 
     # Authenticate the client
-    authenticate
+    @logger.info("#{LOG_KEY}: tyring to authenticate client")
+    @client.retryable_authenticate(username: @username, password: @password.value + @security_token.value, retry_attempts: RETRY_ATTEMPTS)
 
     # Save org id to distinguish between multiple orgs.
-    # @org_id = @client.org_id #todo why doesnt this work???
-    @org_id = @client.query('select id from Organization')[0]['Id']    #todo do i really need this?? only used it to create @path variable
+    # @org_id = @client.org_id #todo(mo) why doesnt this work???
+    @org_id = @client.query('select id from Organization')[0]['Id']
 
     # Set up time interval for forever while loop.
-    # @interval = @poll_interval_in_hours * 3600
-    @interval = 60
+    @interval = @poll_interval_in_hours * 3600
 
     # Set @sfdc_info_path to home directory if provided path from config does not exist.
-    @sfdc_info_path = Dir.home unless File.directory?(@sfdc_info_path)
+    unless File.directory?(@sfdc_info_path)
+      @logger.warn("#{LOG_KEY}: provided path does not exist or is invalid. sfdc_info_path=#{@sfdc_info_path}")
+      @sfdc_info_path = Dir.home
+    end
 
     # Generate the path using org_id to keep track of the last read log file date based on the org rather than users.
     @path = "#{@sfdc_info_path}/.#{FILE_PREFIX}_#{@org_id}"
-    @logger.info("#{LOG_KEY}: generated path = #{@path}")
+    @logger.info("#{LOG_KEY}: generated info path = #{@path}")
 
     # Read from .sfdc_info if it exists, otherwise load @last_read_log_date with DEFAULT_TIME.
     if File.exist?(@path)
@@ -85,9 +94,10 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
     end
 
     @logger.info("#{LOG_KEY}: @last_read_instant =  #{@last_read_log_date}")
-  end
+  end # def register
 
-  # def register
+
+
 
   # The second part of logstash pipeline is run, where it expects to have event objects generated and passed into the queue.
 
@@ -97,70 +107,32 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
     next_schedule_time = Time.now + @interval
 
     while true
-      begin
-        # Line for readable log statements.
-        @logger.info('---------------------------------------------------')
+      # Line for readable log statements.
+      @logger.info('---------------------------------------------------')
 
-        # Grab a list of Sobjects, specifically EventLogFiles.
-        query_result_list = @client.query("SELECT Id, EventType, Logfile, LogDate FROM EventLogFile WHERE LogDate > #{@last_read_log_date} ORDER BY LogDate DESC ")
+      # Grab a list of Sobjects, specifically EventLogFiles.
+      soql_expr = "SELECT Id, EventType, Logfile, LogDate, LogFileLength FROM EventLogFile WHERE LogDate > #{@last_read_log_date} ORDER BY LogDate DESC "
+      query_result_list = @client.retryable_query(username: @username, password: @password.value + @security_token.value, retry_attempts: RETRY_ATTEMPTS, soql_expr: soql_expr)
 
-        if !query_result_list.empty?
-          # Creates events from query_result_list, then simply append the events to the queue.
-          @logger.info("#{LOG_KEY}: query result is NOT empty, size = #{query_result_list.size.to_s}")
-          enqueue_events(query_result_list, queue)
-        else
-          # Make sure to save the last read LogDate even when query_result_list is empty
-          @logger.info("#{LOG_KEY}: query result is empty")
-          save_last_read_log_date(Time.now.utc.iso8601.to_s)
-        end
-
-        # Depending on the next_schedule_time and the time taking the compute the code above, sleep this loop and adjust the next_schedule_time.
-        @logger.info("#{LOG_KEY}: next_schedule_time = #{next_schedule_time.to_s}")
-        next_schedule_time = stall_schedule(next_schedule_time)
-
-      rescue Databasedotcom::SalesForceError => e
-
-        # Session has expired. Force user logout. Then re-authenticate
-        if e.message == 'Session expired or invalid'
-          @logger.info("#{LOG_KEY}: Session expired or invalid, authenticating again")
-          authenticate
-
-          # todo adjust time???
-        else
-          @logger.error("SFDC: #{e.message}")
-        end
-
-      end # rescue / begin
-    end # while loop
-  end
-
-  # def run
-
-
-  # This helper method is called whenever we need to initaialize the client object or whenever the
-  # client token expires. It will attempt 3 times with a 30 second delay between each retry. On the 3th try, if it
-  # fails the exception will be raised.
-
-  private
-  def authenticate
-    @logger.info("#{LOG_KEY}: tyring to authenticate client")
-    3.times do |count|
-      begin
-       # If exception is not thrown, then break out of loop.
-        @client.authenticate username: @username, password: @password.value + @security_token.value
-        @logger.info("#{LOG_KEY}: client has been authenticated")
-        break
-      rescue Exception => e
-        # Sleep for 30 seconds 2 times. On the 3th time, raise the exception.
-        unless (count == 2)
-          @logger.error("#{LOG_KEY}: Failed to authenticate going to try again in 30 seconds")
-          sleep(30)
-        else
-          raise e
-        end
+      if !query_result_list.empty?
+        # Creates events from query_result_list, then simply append the events to the queue.
+        @logger.info("#{LOG_KEY}: query result is NOT empty, size = #{query_result_list.size.to_s}")
+        enqueue_events(query_result_list, queue)
+      else
+        # Make sure to save the last read LogDate even when query_result_list is empty
+        @logger.info("#{LOG_KEY}: query result is empty")
+        # save_last_read_log_date(Time.now.utc.iso8601.to_s)
+        save_last_read_log_date(DateTime.now.new_offset(0).strftime("%FT%T.%LZ"))
       end
-    end
-  end # def authenticate
+
+      # Depending on the next_schedule_time and the time taking the compute the code above, sleep this loop and adjust the next_schedule_time.
+      @logger.info("#{LOG_KEY}: next_schedule_time = #{next_schedule_time.to_s}")
+      next_schedule_time = stall_schedule(next_schedule_time)
+
+    end # while loop
+  end # def run
+
+
 
 
   # Given a list of query result that are Sobjects, iterate through the list and grab all the CSV files that each
@@ -174,10 +146,11 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   def enqueue_events(query_result_list, queue)
     @logger.info("#{LOG_KEY}: enqueue events")
     # query_result_list is in descending order based on the LogDate, so grab the first one of the list and save the LogDate to @last_read_log_date and .sfdc_info
-    @last_read_log_date = Time.parse(query_result_list.first.LogDate.to_s).utc.iso8601.to_s
+    @last_read_log_date = query_result_list.first.LogDate.strftime('%FT%T.%LZ')
 
     # Overwrite the .sfdc_elf_logstash file with the @last_read_log_date.
-    save_last_read_log_date(@last_read_log_date) #todo might have to move this to the end of the method, incase of a crash in between.
+    # Note: we currently do not support deduplication, but will implement it soon. todo:need to implement deduplication
+    save_last_read_log_date(@last_read_log_date) #todo might have to move this to the end of the method, in case of a crash in between.
 
     # Grab a list of Tempfiles that contains CSV file data.
     tempfile_list = get_csv_tempfile_list(query_result_list)
@@ -208,9 +181,7 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   # This helper method takes as input a key data and val data that is in CSV format. Using
   # CSV.parse_line we will get back an array for each then one of them. Then create a new
   # Event object where we will place all of the key value pairs into the Event object and then
-  # return it.
-  #
-  # TODO: event.timestamp     = Time.strptime(values[i], 'YYYYMMddHHmmss.SSS').utc.iso8601
+  # return it.d
 
   private
   def create_event(column, data)
@@ -225,7 +196,7 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
       column_name = column[i]
 
       # Handle when field_name is 'TIMESTAMP', Change the @timestamp field to the actual time on the CSV file, but convert it to iso8601.
-      event.timestamp = Time.parse(data[i]).utc.iso8601 if column_name == 'TIMESTAMP' #TODO check to see if we can add mill
+      event.timestamp = DateTime.parse(data[i]).strftime("%FT%T.%LZ") if column_name == 'TIMESTAMP'
 
       # Add the column data pair to event object.
       event[column_name] = data[i]
@@ -234,6 +205,8 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
     # Return the event
     event
   end # def create_event
+
+
 
 
   # This helper method takes as input a list/collection of Sobjects which each
@@ -250,7 +223,6 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
 
   private
   def get_csv_tempfile_list(query_result_list)
-    #todo isolate failes from one another, example large file
     @logger.info("#{LOG_KEY}: generating tempfile list")
     result =[]
     query_result_list.each do |event_log_file|
@@ -268,13 +240,17 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
       # Append the Tempfile object into the result list
       result << tmp
 
-      # @logger.error('MO: Id = '        << event_log_file.Id)
-      # @logger.error('MO: EventType = ' << event_log_file.EventType)
-      # @logger.error('MO: LogFile = '   << event_log_file.LogFile)
-      # @logger.error('MO: LogDate = '   << event_log_file.LogDate.to_s)
+      # Log the info from event_log_file object.
+      @logger.info("  #{LOG_KEY}: Id = #{event_log_file.Id}")
+      @logger.info("  #{LOG_KEY}: EventType = #{event_log_file.EventType}")
+      @logger.info("  #{LOG_KEY}: LogFile = #{event_log_file.LogFile}")
+      @logger.info("  #{LOG_KEY}: LogDate = #{event_log_file.LogDate.to_s}")
+      @logger.info("  #{LOG_KEY}: LogFileLength = #{event_log_file.LogFileLength}")
+      @logger.info('  ......................................')
     end
     result
   end # def get_csv_files
+
 
 
 
