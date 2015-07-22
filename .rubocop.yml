@@ -1,0 +1,30 @@
+# Must be compact, so that Logstash can locate plugins via "LogStash::Inputs::YourPluginName"
+Style/ClassAndModuleChildren:
+  EnforcedStyle: compact
+
+# ABC is a metric based on the number of Assignments, Branches, and Conditions.
+# More info: http://c2.com/cgi/wiki?AbcMetric
+AbcSize:
+  Max: 25
+
+# Disable messages about using fail instead of raise for a specific try/catch block.
+SignalException:
+  Enabled: false
+
+# Disable message about providing an exception class and message as an argument to raise.
+RaiseArgs:
+  EnforcedStyle: compact
+
+Metrics/LineLength:
+  AllowURI: true
+  Max: 120
+
+Metrics/MethodLength:
+  Enabled: false
+
+Metrics/ClassLength:
+  Max: 150
+
+EmptyLines:
+  Enabled: false
+
