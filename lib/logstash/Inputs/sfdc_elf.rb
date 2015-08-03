@@ -1,10 +1,10 @@
 # encoding: utf-8
 require 'logstash/inputs/base'
 require 'logstash/namespace'
-require_relative 'sfdc_elf_lib/client_with_streaming_support'
-require_relative 'sfdc_elf_lib/queue_util'
-require_relative 'sfdc_elf_lib/state_persistor'
-require_relative 'sfdc_elf_lib/scheduler'
+require_relative 'sfdc_elf/client_with_streaming_support'
+require_relative 'sfdc_elf/queue_util'
+require_relative 'sfdc_elf/state_persistor'
+require_relative 'sfdc_elf/scheduler'
 
 # This plugin enables Salesforce customers to load EventLogFile(ELF) data from their Force.com orgs. The plugin will
 # handle downloading ELF CSV file, parsing them, and handling any schema changes transparently.
