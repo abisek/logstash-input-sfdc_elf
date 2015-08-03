@@ -1,4 +1,4 @@
-require_relative '../spec_helper'
+require_relative '../../spec_helper'
 
 describe StatePersistor do
   let(:provided_path) { provided_path =  Dir.tmpdir }

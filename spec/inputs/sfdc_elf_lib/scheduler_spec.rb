@@ -1,4 +1,4 @@
-require_relative '../spec_helper'
+require_relative '../../spec_helper'
 
 describe Scheduler do
   let(:hour_interval) { hour_interval = 3600 }
