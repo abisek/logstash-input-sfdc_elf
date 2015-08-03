@@ -1,9 +1,15 @@
-# encoding: utf-8
 require 'databasedotcom'
 
 # This class subclasses Databasedotcom Client object and added steaming
 # downloading and retryable authentication and retryable query.
 class ClientWithStreamingSupport < Databasedotcom::Client
+  # Constants
+  # LOG_KEY        = 'SFDC - ClientWithStreamingSupport'
+  #
+  # def initialize
+  #   @logger = Cabin::Channel.get(LogStash)
+  # end
+
   def streaming_download(path, output_stream)
     connection = Net::HTTP.new(URI.parse(instance_url).host, 443)
     connection.use_ssl = true

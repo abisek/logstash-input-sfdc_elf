@@ -1,0 +1,29 @@
+{
+  "totalSize" : 0,
+  "done" : true,
+  "records" : [
+    {
+      "attributes" : {
+        "type" : "EventLogFile",
+        "url" : "/services/data/v33.0/sobjects/EventLogFile/0AT300000000Y4aGAE"
+      },
+      "Id" : "some_id",
+      "LogFile" : "/services/data/v33.0/sobjects/EventLogFile/create_event_sampledata3",
+      "LogDate" : "2015-07-23T00:00:00.000+0000",
+      "LogFileLength" : 0.0,
+      "EventType" : "ApexExecution"
+    },
+    {
+      "attributes" : {
+        "type" : "EventLogFile",
+        "url" : "/services/data/v33.0/sobjects/EventLogFile/0AT300000000Y4aGAE"
+      },
+      "Id" : "some_id",
+      "LogFile" : "/services/data/v33.0/sobjects/EventLogFile/create_event_sampledata3",
+      "LogDate" : "2015-07-23T00:00:00.000+0000",
+      "LogFileLength" : 0.0,
+      "EventType" : "ApexExecution"
+    }
+  ]
+}
+

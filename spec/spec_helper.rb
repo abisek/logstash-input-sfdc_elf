@@ -3,8 +3,13 @@ require 'simplecov'
 SimpleCov.start
 
 require 'logstash/devutils/rspec/spec_helper'
-require 'lib/logstash/Inputs/sfdc_elf'
+require 'lib/logstash/inputs/sfdc_elf'
+require 'webmock/rspec'
+require 'timecop'
 
+
+
+# Set up color and formatting for Rspec tests.
 RSpec.configure do |config|
   # Use color in STDOUT
   config.color = true
@@ -14,4 +19,20 @@ RSpec.configure do |config|
 
   # Use the specified formatter
   config.formatter = :documentation # :progress, :html, :textmate
+end
+
+
+
+# Turn off all connection to the internet.
+WebMock.disable_net_connect!(allow_localhost: true)
+
+
+
+# Helper methods to make it simple getting fixture data.
+def fixture_path
+  File.expand_path('../fixtures', __FILE__)
+end
+
+def fixture(file)
+  File.new(fixture_path + '/' + file)
 end

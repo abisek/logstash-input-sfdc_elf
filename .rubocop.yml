@@ -1,4 +1,4 @@
-# Must be compact, so that Logstash can locate plugins via "LogStash::Inputs::YourPluginName"
+# Must be compact, so that Logstash can locate plugins via "LogStash::inputs::YourPluginName"
 Style/ClassAndModuleChildren:
   EnforcedStyle: compact
 
