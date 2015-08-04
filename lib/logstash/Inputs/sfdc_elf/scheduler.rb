@@ -1,11 +1,13 @@
+# encoding: utf-8
+
 # Handel when to schedule the next process based on the poll interval specified. The poll interval provided has to be
 # in seconds.
 class Scheduler
   LOG_KEY = 'SFDC - Scheduler'
 
-  def initialize(poll_interval)
+  def initialize(poll_interval_in_seconds)
     @logger = Cabin::Channel.get(LogStash)
-    @poll_interval = poll_interval
+    @poll_interval_in_seconds = poll_interval_in_seconds
   end
 
 
@@ -16,7 +18,7 @@ class Scheduler
   public
   def schedule(&block)
     # Grab the current time and one @interval to it so that the while loop knows when it need to compute again.
-    next_schedule_time = Time.now + @poll_interval
+    next_schedule_time = Time.now + @poll_interval_in_seconds
 
     # sleep until start time
     loop do
@@ -57,16 +59,15 @@ class Scheduler
     # Example 2 case from above.
     if current_time > next_schedule_time
       @logger.info("#{LOG_KEY}: missed next schedule time, proceeding to next task without sleeping")
-      next_schedule_time += @poll_interval while current_time > next_schedule_time
+      next_schedule_time += @poll_interval_in_seconds while current_time > next_schedule_time
 
       # Example 1 case from above.
     else
       @logger.info("#{LOG_KEY}: sleeping for #{(next_schedule_time - current_time)} seconds")
       sleep(next_schedule_time - current_time)
-      next_schedule_time += @poll_interval
+      next_schedule_time += @poll_interval_in_seconds
     end
     @logger.info("#{LOG_KEY} time after sleep   = #{Time.now}")
     next_schedule_time
   end # def determine_loop_stall
-
-end
+end # Scheduler

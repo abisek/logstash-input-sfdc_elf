@@ -8,7 +8,6 @@ describe Scheduler do
   end
 
   describe '#stall_schedule' do
-
     # Precondition:
     #               - none
     it 'Missed the next scheduled time' do
@@ -28,7 +27,7 @@ describe Scheduler do
       # Since the start time is 1:00pm and next schedule time is 2:00pm, but the current time is 2:30pm we missed the
       # schedule time. So then we expect the there is no sleep and the next schedule is 3:00pm.
       next_schedule_time = scheduler.stall_schedule(next_schedule_time)
-      expect(next_schedule_time).to eq (Time.local(2015, 9, 1, 15, 00, 0))
+      expect(next_schedule_time).to eq Time.local(2015, 9, 1, 15, 00, 0)
     end
 
     # Precondition:
@@ -52,8 +51,7 @@ describe Scheduler do
       # within the scheduled time. So then we expect to sleep for 5 seconds and the next schedule is 3:00pm.
       next_schedule_time = scheduler.stall_schedule(next_schedule_time)
 
-      expect(next_schedule_time).to eq (Time.local(2015, 9, 1, 15, 00, 0))
+      expect(next_schedule_time).to eq Time.local(2015, 9, 1, 15, 00, 0)
     end
-  end #stall_schedule
-
+  end # stall_schedule
 end # describe Scheduler

@@ -13,11 +13,9 @@ describe StatePersistor do
 
 
   describe '#get_last_indexed_log_date' do
-
     # Precondition:
     #               - .sfdc_info_logstash file does not exist in the system temp directory.
     it 'creates .sdfc_info_logstash file because it does not exist' do
-
       # I expect the sfdc_info_logstash file to not exist.
       expect(File.exist?(provided_path_with_file)).to eq false
 
@@ -37,7 +35,7 @@ describe StatePersistor do
       # I expect the .sfdc_info_logstash file to not exist with default date in it.
       expect(state_persistor.get_last_indexed_log_date).to eq '0001-01-01T00:00:00Z'
     end
-  end #get_last_indexed_log_date
+  end # get_last_indexed_log_date
 
 
 
@@ -57,6 +55,4 @@ describe StatePersistor do
       expect(state_persistor.get_last_indexed_log_date).to eq '3672-21-11T23:59:342Z'
     end
   end
-
-
 end # describe StatePersistor

@@ -1,3 +1,4 @@
+# encoding: utf-8
 require 'databasedotcom'
 
 # This class subclasses Databasedotcom Client object and added steaming

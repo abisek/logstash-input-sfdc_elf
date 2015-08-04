@@ -1,18 +1,16 @@
 require_relative '../../spec_helper'
-require 'csv'
 
 describe QueueUtil do
-
   before do
     # Stub authentication
     stub_request(:post, /login.salesforce.com/).
-        with(:headers => {'Accept'=>'*/*', 'User-Agent'=>'Ruby'}).
-        to_return(:status => 200, body: fixture('auth_success_response.json'), :headers => {})
+      with(headers: { Accept: '*/*', User_Agent: 'Ruby' }).
+      to_return(status: 200, body: fixture('auth_success_response.json'), headers: {})
 
     # Stub getting EventLogFile description
     stub_request(:get, 'https://na1.salesforce.com/services/data/v22.0/sobjects/EventLogFile/describe').
-        with(:headers => {'Accept'=>'*/*', 'Accept-Encoding'=>'gzip;q=1.0,deflate;q=0.6,identity;q=0.3', 'Authorization'=>'OAuth access_token', 'User-Agent'=>'Ruby'}).
-        to_return(:status => 200, body: fixture('queue_util/eventlogfile_describe.json'), :headers => {})
+      with(headers: { Accept: '*/*', Authorization: 'OAuth access_token', User_Agent: 'Ruby' }).
+      to_return(status: 200, body: fixture('queue_util/eventlogfile_describe.json'), headers: {})
   end
 
 
@@ -21,33 +19,31 @@ describe QueueUtil do
     before do
       # Stub getting list of EventLogFiles.
       stub_request(:get, 'https://na1.salesforce.com/services/data/v22.0/query?q=SELECT%20Id,%20EventType,%20Logfile,%20LogDate,%20LogFileLength%20FROM%20EventLogFile').
-          with(:headers => {'Accept'=>'*/*', 'Authorization'=>'OAuth access_token', 'User-Agent'=>'Ruby'}).
-          to_return(:status => 200, body: fixture('queue_util/eventlogfile_list.json'), :headers => {})
+        with(headers: { Accept: '*/*', Authorization: 'OAuth access_token', User_Agent: 'Ruby' }).
+        to_return(status: 200, body: fixture('queue_util/eventlogfile_list.json'), headers: {})
 
       # Stub in all of the require EventLogFiles from sample_data*
       stub_request(:get, 'https://na1.salesforce.com/services/data/v33.0/sobjects/EventLogFile/sample_data1').
-          with(:headers => {'Accept'=>'*/*', 'Authorization'=>'OAuth access_token', 'User-Agent'=>'Ruby'}).
-          to_return(:status => 200, body: fixture('queue_util/sample_data1.csv'), :headers => {})
+        with(headers: { Accept: '*/*', Authorization: 'OAuth access_token', User_Agent: 'Ruby' }).
+        to_return(status: 200, body: fixture('queue_util/sample_data1.csv'), headers: {})
 
       stub_request(:get, 'https://na1.salesforce.com/services/data/v33.0/sobjects/EventLogFile/sample_data2').
-          with(:headers => {'Accept'=>'*/*', 'Authorization'=>'OAuth access_token', 'User-Agent'=>'Ruby'}).
-          to_return(:status => 200, body: fixture('queue_util/sample_data2.csv'), :headers => {})
+        with(headers: { Accept: '*/*', Authorization: 'OAuth access_token', User_Agent: 'Ruby' }).
+        to_return(status: 200, body: fixture('queue_util/sample_data2.csv'), headers: {})
 
       stub_request(:get, 'https://na1.salesforce.com/services/data/v33.0/sobjects/EventLogFile/sample_data3').
-          with(:headers => {'Accept'=>'*/*', 'Authorization'=>'OAuth access_token', 'User-Agent'=>'Ruby'}).
-          to_return(:status => 200, body: fixture('queue_util/sample_data3.csv'), :headers => {})
+        with(headers: { Accept: '*/*', Authorization: 'OAuth access_token', User_Agent: 'Ruby' }).
+        to_return(status: 200, body: fixture('queue_util/sample_data3.csv'), headers: {})
 
       stub_request(:get, 'https://na1.salesforce.com/services/data/v33.0/sobjects/EventLogFile/sample_data4').
-          with(:headers => {'Accept'=>'*/*', 'Authorization'=>'OAuth access_token', 'User-Agent'=>'Ruby'}).
-          to_return(:status => 200, body: fixture('queue_util/sample_data4.csv'), :headers => {})
+        with(headers: { Accept: '*/*', Authorization: 'OAuth access_token', User_Agent: 'Ruby' }).
+        to_return(status: 200, body: fixture('queue_util/sample_data4.csv'), headers: {})
 
       stub_request(:get, 'https://na1.salesforce.com/services/data/v33.0/sobjects/EventLogFile/sample_data5').
-          with(:headers => {'Accept'=>'*/*', 'Authorization'=>'OAuth access_token', 'User-Agent'=>'Ruby'}).
-          to_return(:status => 200, body: fixture('queue_util/sample_data5.csv'), :headers => {})
-
+        with(headers: { Accept: '*/*', Authorization: 'OAuth access_token', User_Agent: 'Ruby' }).
+        to_return(status: 200, body: fixture('queue_util/sample_data5.csv'), headers: {})
     end
 
-    # /services/data/v33.0/query?q=select+id,logfile,logdate,logfilelength,eventtype+from+eventlogfile+where+logdate+%3e+0001-01-01T00:00:00Z+order+by+logdate+desc
 
     # Precondition:
     #               - None.
@@ -72,28 +68,27 @@ describe QueueUtil do
 
 
   describe '#create_event' do
-
     before do
       # Stub getting list of EventLogFiles.
       stub_request(:get, 'https://na1.salesforce.com/services/data/v22.0/query?q=GiveMe:create_event_ELF_list1.json').
-          with(:headers => {'Accept'=>'*/*', 'Authorization'=>'OAuth access_token', 'User-Agent'=>'Ruby'}).
-          to_return(:status => 200, body: fixture('queue_util/create_event_ELF_list1.json'), :headers => {})
+        with(headers: { Accept: '*/*', Authorization: 'OAuth access_token', User_Agent: 'Ruby' }).
+        to_return(status: 200, body: fixture('queue_util/create_event_ELF_list1.json'), headers: {})
 
       # Stub in all of the require EventLogFiles from sample_data
       stub_request(:get, 'https://na1.salesforce.com/services/data/v33.0/sobjects/EventLogFile/create_event_sampledata1').
-          with(:headers => {'Accept'=>'*/*', 'Authorization'=>'OAuth access_token', 'User-Agent'=>'Ruby'}).
-          to_return(:status => 200, body: fixture('queue_util/create_event_sampledata1.csv'), :headers => {})
+        with(headers: { Accept: '*/*', Authorization: 'OAuth access_token', User_Agent: 'Ruby' }).
+        to_return(status: 200, body: fixture('queue_util/create_event_sampledata1.csv'), headers: {})
 
 
 
       stub_request(:get, 'https://na1.salesforce.com/services/data/v22.0/query?q=GiveMe:create_event_ELF_list2.json').
-          with(:headers => {'Accept'=>'*/*', 'Authorization'=>'OAuth access_token', 'User-Agent'=>'Ruby'}).
-          to_return(:status => 200, body: fixture('queue_util/create_event_ELF_list2.json'), :headers => {})
+        with(headers: { Accept: '*/*', Authorization: 'OAuth access_token', User_Agent: 'Ruby' }).
+        to_return(status: 200, body: fixture('queue_util/create_event_ELF_list2.json'), headers: {})
 
       # Stub in all of the require EventLogFiles from sample_data
       stub_request(:get, 'https://na1.salesforce.com/services/data/v33.0/sobjects/EventLogFile/create_event_sampledata2').
-          with(:headers => {'Accept'=>'*/*', 'Authorization'=>'OAuth access_token', 'User-Agent'=>'Ruby'}).
-          to_return(:status => 200, body: fixture('queue_util/create_event_sampledata2.csv'), :headers => {})
+        with(headers: { Accept: '*/*', Authorization: 'OAuth access_token', User_Agent: 'Ruby' }).
+        to_return(status: 200, body: fixture('queue_util/create_event_sampledata2.csv'), headers: {})
     end
 
     # Precondition:
@@ -137,9 +132,9 @@ describe QueueUtil do
       event2 = queue.pop
 
       # I expect event1 and event2 to have different keys, which are bases on the CSV files header.
-      expect(event1.to_hash.keys).not_to eq (event2.to_hash.keys)
+      expect(event1.to_hash.keys).not_to eq event2.to_hash.keys
     end
-  end #create_event
+  end # create_event
 
 
 
@@ -148,13 +143,13 @@ describe QueueUtil do
     before do
       # Stub getting list of EventLogFiles.
       stub_request(:get, 'https://na1.salesforce.com/services/data/v22.0/query?q=GiveMe:create_event_ELF_list3.json').
-          with(:headers => {'Accept'=>'*/*', 'Authorization'=>'OAuth access_token', 'User-Agent'=>'Ruby'}).
-          to_return(:status => 200, body: fixture('queue_util/create_event_ELF_list3.json'), :headers => {})
+        with(headers: { Accept: '*/*', Authorization: 'OAuth access_token', User_Agent: 'Ruby' }).
+        to_return(status: 200, body: fixture('queue_util/create_event_ELF_list3.json'), headers: {})
 
       # Stub in all of the require EventLogFiles from sample_data
       stub_request(:get, 'https://na1.salesforce.com/services/data/v33.0/sobjects/EventLogFile/create_event_sampledata3').
-          with(:headers => {'Accept'=>'*/*', 'Authorization'=>'OAuth access_token', 'User-Agent'=>'Ruby'}).
-          to_return(:status => 200, body: fixture('queue_util/create_event_sampledata3.csv'), :headers => {})
+        with(headers: { Accept: '*/*', Authorization: 'OAuth access_token', User_Agent: 'Ruby' }).
+        to_return(status: 200, body: fixture('queue_util/create_event_sampledata3.csv'), headers: {})
     end
 
     it 'returns a list of tempfiles that are pointing to the beginning of the file' do
@@ -169,9 +164,7 @@ describe QueueUtil do
 
       # Loop though each tempfile.
       tempfile_list.each do |tmp|
-
         expect(tmp.readline).to eq "Beginning of file\n"
-
         expect(tmp.readline).to eq 'End of file'
 
         # Close tmp file and unlink it, doing this will delete the actual tempfile.
@@ -181,6 +174,5 @@ describe QueueUtil do
     end
 
     # TODO: test token expires when trying to do streaming download
-  end #get_csv_tempfile_list
-
+  end # get_csv_tempfile_list
 end # describe SfdcElf

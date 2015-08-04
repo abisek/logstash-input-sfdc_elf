@@ -1,13 +1,13 @@
+# encoding: utf-8
+
 # Handel what the next procedure should be based on the .sfdc_info_logstash file. States proceed via reading and
 # writing LogDates to the .sfdc_info_logstash file.
-
 class StatePersistor
-
   LOG_KEY        = 'SFDC - StatePersistor'
   FILE_PREFIX    = 'sfdc_info_logstash'
   DEFAULT_TIME   = '0001-01-01T00:00:00Z'
 
-  def initialize(base_path, org_id) #base_path
+  def initialize(base_path, org_id)
     @logger = Cabin::Channel.get(LogStash)
     @path_with_file_name = "#{base_path}/.#{FILE_PREFIX}_#{org_id}"
   end
@@ -21,7 +21,7 @@ class StatePersistor
     # Read from .sfdc_info_logstash if it exists, otherwise load @last_read_log_date with DEFAULT_TIME.
     if File.exist?(@path_with_file_name)
       # Load last read LogDate from .sfdc_info_logstash.
-      @logger.info("#{LOG_KEY}: .#{@path_with_file_name} does exist, read time from it and stored it in @last_read_instant")
+      @logger.info("#{LOG_KEY}: .#{@path_with_file_name} does exist, read and return the time on it.")
       File.read(@path_with_file_name)
     else
       # Load default time to ensure getting all possible EventLogFiles from oldest to current. Also

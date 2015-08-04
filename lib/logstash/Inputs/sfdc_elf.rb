@@ -28,12 +28,12 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   # TODO: make make a simple .gif that shows this process? and attach it?
   config :security_token, validate: :password, required: true
 
-  # The path to be use to store the .sfdc_info_logstash file. You set the path like so, `/var/log` Paths must be
+  # The path to be use to store the .sfdc_info_logstash file. You set the path like so, `~/SomeDirectory` Paths must be
   # absolute and cannot be relative.
   config :path, validate: :string, default: Dir.home
 
   # How often this plugin should grab new data.
-  config :poll_interval_in_hours, validate: [*6..24], default: 24 # TODO: defualt is 24hours and do validation in regiter, fail fast if not a positive interger units to mintures
+  config :poll_interval_in_hours, validate: [*6..24], default: 24
 
 
   # The first part of logstash pipeline is register, where all instance variables are initialized.
@@ -52,27 +52,27 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
     @client.retryable_authenticate(username: @username,
                                    password: @password.value + @security_token.value,
                                    retry_attempts: RETRY_ATTEMPTS)
-    @logger.info("#{LOG_KEY}: authenticating succeeded") # TODO: move to streaming support class
+    @logger.info("#{LOG_KEY}: authenticating succeeded")
 
     # Save org id to distinguish between multiple orgs.
     # @org_id = @client.org_id # TODO: (mo) why doesnt this work???
     @org_id = @client.query('select id from Organization')[0]['Id']
 
     # Set up time interval for forever while loop.
-    @poll_interval_in_hours = @poll_interval_in_hours * 3600
+    @poll_interval_in_seconds = @poll_interval_in_hours * 3600
     # @poll_interval_in_hours = 10
 
     # Handel the @path config passed by the user. If path does not exist then set @path to home directory.
     verify_path
 
     # Handel parsing the data into event objects and enqueue it to the queue.
-    @queue_util = QueueUtil.new()
+    @queue_util = QueueUtil.new
 
     # Handel when to schedule the next process based on the @poll_interval_in_hours config.
-    @scheduler = Scheduler.new(@poll_interval_in_hours)
+    @scheduler = Scheduler.new(@poll_interval_in_seconds)
 
     # Handel state of the plugin based on the read and writes of LogDates to the .sdfc_info_logstash file.
-    @state_persistor = StatePersistor.new(@path,@org_id)
+    @state_persistor = StatePersistor.new(@path, @org_id)
 
     # Grab the last indexed log date.
     @last_indexed_log_date = @state_persistor.get_last_indexed_log_date
@@ -111,9 +111,11 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
         # TODO: grab tempfiles here!!
 
         # Overwrite the .sfdc_info_logstash file with the @last_read_log_date.
-        # Note: we currently do not support deduplication, but will implement it soon. TODO: need to implement deduplication
+        # Note: we currently do not support deduplication, but will implement it soon.
+        # TODO: need to implement deduplication
         # TODO: might have to move this after enqueue_events(), in case of a crash in between.
-        @state_persistor.update_last_indexed_log_date(@last_indexed_log_date) # TODO: can do all @state_persistor calls after the if statement
+        # TODO: can do all @state_persistor calls after the if statement
+        @state_persistor.update_last_indexed_log_date(@last_indexed_log_date)
 
         # Creates events from query_result_list, then simply append the events to the queue.
         @queue_util.enqueue_events(query_result_list, queue, @client)
@@ -121,7 +123,6 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
         # Make sure to save the last read LogDate even when query_result_list is empty
         @state_persistor.update_last_indexed_log_date(DateTime.now.new_offset(0).strftime('%FT%T.%LZ'))
       end
-
     end # do loop
   end # def run
 
@@ -139,5 +140,4 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
     end
     @logger.info("#{LOG_KEY}: path = #{@path}")
   end
-
 end # class LogStash::inputs::File

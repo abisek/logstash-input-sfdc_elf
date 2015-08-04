@@ -1,3 +1,4 @@
+# encoding: utf-8
 require 'csv'
 
 # Handel parsing data into event objects and then enqueue all of the events to the queue.
@@ -30,22 +31,24 @@ class QueueUtil
 
     # Loop though each tempfile.
     tempfile_list.each do |tmp|
-      # Get the column from Tempfile, which is in the first line and in CSV format, then parse it.
-      # It will return an array.
-      column = CSV.parse_line(tmp.readline, col_sep: SEPARATOR, quote_char: QUOTE_CHAR)
+      begin
+        # Get the column from Tempfile, which is in the first line and in CSV format, then parse it.
+        # It will return an array.
+        column = CSV.parse_line(tmp.readline, col_sep: SEPARATOR, quote_char: QUOTE_CHAR)
 
-      # Loop through tempfile, line by line.
-      tmp.each_line do |data|
-        # Parse the current line, it will return an array.
-        parsed_data = CSV.parse_line(data, col_sep: SEPARATOR, quote_char: QUOTE_CHAR)
+        # Loop through tempfile, line by line.
+        tmp.each_line do |data|
+          # Parse the current line, it will return an array.
+          parsed_data = CSV.parse_line(data, col_sep: SEPARATOR, quote_char: QUOTE_CHAR)
 
-        # create_event will return a event object.
-        queue << create_event(column, parsed_data)
+          # create_event will return a event object.
+          queue << create_event(column, parsed_data)
+        end
+      ensure
+        # Close tmp file and unlink it, doing this will delete the actual tempfile.
+        tmp.close
+        tmp.unlink
       end
-
-      # Close tmp file and unlink it, doing this will delete the actual tempfile.
-      tmp.close
-      tmp.unlink
     end # do loop, tempfile_list
   end # def create_event_list
 
@@ -124,5 +127,4 @@ class QueueUtil
     end
     result
   end # def get_csv_files
-
 end # QueueUtil
