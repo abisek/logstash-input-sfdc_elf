@@ -92,7 +92,7 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
       @logger.info('---------------------------------------------------')
 
       # Grab a list of SObjects, specifically EventLogFiles.
-      soql_expr = "SELECT Id, EventType, Logfile, LogDate, LogFileLength
+      soql_expr = "SELECT Id, EventType, Logfile, LogDate, LogFileLength, LogFileFieldTypes
                    FROM EventLogFile
                    WHERE LogDate > #{@last_indexed_log_date} ORDER BY LogDate DESC "
 

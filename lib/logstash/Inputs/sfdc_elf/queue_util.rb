@@ -8,6 +8,9 @@ class QueueUtil
   SEPARATOR      = ','
   QUOTE_CHAR     = '"'
 
+  # TODO: comment
+  EventLogFile = Struct.new(:field_types, :temp_file)
+
   def initialize
     @logger = Cabin::Channel.get(LogStash)
   end
@@ -30,19 +33,21 @@ class QueueUtil
     tempfile_list = get_csv_tempfile_list(query_result_list, client)
 
     # Loop though each tempfile.
-    tempfile_list.each do |tmp|
+    tempfile_list.each do |elf|
       begin
+        tmp = elf.temp_file
         # Get the column from Tempfile, which is in the first line and in CSV format, then parse it.
         # It will return an array.
         column = CSV.parse_line(tmp.readline, col_sep: SEPARATOR, quote_char: QUOTE_CHAR)
 
         # Loop through tempfile, line by line.
-        tmp.each_line do |data|
-          # Parse the current line, it will return an array.
-          parsed_data = CSV.parse_line(data, col_sep: SEPARATOR, quote_char: QUOTE_CHAR)
+        tmp.each_line do |line|
+          # Parse the current line, it will return an string array.
+          string_array = CSV.parse_line(line, col_sep: SEPARATOR, quote_char: QUOTE_CHAR)
 
+          data = string_to_type_array(string_array, elf.field_types)
           # create_event will return a event object.
-          queue << create_event(column, parsed_data)
+          queue << create_event(column, data)
         end
       ensure
         # Close tmp file and unlink it, doing this will delete the actual tempfile.
@@ -54,13 +59,32 @@ class QueueUtil
 
 
 
+  private
+  def string_to_type_array(string_array, field_types)
+    data = []
+
+    field_types.each_with_index do |type, i|
+      case type
+        when 'Number'
+          data[i] = (string_array[i].empty?) ? nil : string_array[i].to_f
+        when 'Boolean'
+          data[i] = (string_array[i].empty?) ? nil : (string_array[i] == '0')
+        else # 'String', 'Id', 'EscapedString', 'Set', 'IP'
+          data[i] = (string_array[i].empty?) ? nil : string_array[i]
+          # data << string_array[i]
+      end
+    end # do loop
+
+    data
+  end # convert_string_to_type
+
 
   # This helper method takes as input a key data and val data that is in CSV format. Using CSV.parse_line we will get
   # back an array for each then one of them. Then create a new Event object where we will place all of the key value
   # pairs into the Event object and then return it.
 
   private
-  def create_event(column, data)
+  def create_event(column, data) # TODO: change to schema, data
     # Initaialize event to be used. @timestamp and @version is automatically added
     event = LogStash::Event.new
 
@@ -77,12 +101,16 @@ class QueueUtil
       end
 
       # Add the column data pair to event object.
-      event[column_name] = data[i]
+      if data[i] != nil
+        event[column_name] = data[i]
+      end
     end
 
     # Return the event
     event
   end # def create_event
+
+
 
 
 
@@ -115,7 +143,9 @@ class QueueUtil
       tmp.rewind
 
       # Append the Tempfile object into the result list
-      result << tmp
+      # result << tmp
+      field_types = event_log_file.LogFileFieldTypes.split(',')
+      result << EventLogFile.new(field_types, tmp)
 
       # Log the info from event_log_file object.
       @logger.info("  #{LOG_KEY}: Id = #{event_log_file.Id}")
@@ -123,6 +153,7 @@ class QueueUtil
       @logger.info("  #{LOG_KEY}: LogFile = #{event_log_file.LogFile}")
       @logger.info("  #{LOG_KEY}: LogDate = #{event_log_file.LogDate}")
       @logger.info("  #{LOG_KEY}: LogFileLength = #{event_log_file.LogFileLength}")
+      @logger.info("  #{LOG_KEY}: LogFileFieldTypes = #{event_log_file.LogFileFieldTypes}")
       @logger.info('  ......................................')
     end
     result
