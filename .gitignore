@@ -5,3 +5,7 @@ vendor
 *.iml
 .idea
 coverage
+.DS_Store
+lib/.DS_Store
+lib/logstash/.DS_Store
+lib/logstash/inputs/.DS_Store

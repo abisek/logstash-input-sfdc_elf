@@ -8,8 +8,10 @@ class QueueUtil
   SEPARATOR      = ','
   QUOTE_CHAR     = '"'
 
-  # TODO: comment
+  # Zip up the tempfile, which is a CSV file, and the field types, so that when parsing the CSV file we can accurately
+  # convert each field to its respective type. Like Integers and Booleans.
   EventLogFile = Struct.new(:field_types, :temp_file)
+
 
   def initialize
     @logger = Cabin::Channel.get(LogStash)
@@ -18,36 +20,36 @@ class QueueUtil
 
 
 
-  # Given a list of query result that are SObjects, iterate through the list and grab all the CSV files that each
-  # SObject points to via get_csv_tempfile_list(). Once that is done we save the first LogDate in the list to the @path
-  # file. After that we parse the CSV files parse it line by line and generate the events for the parsed CSV line,
-  # append it to the queue.
-  #
-  # Note: when grabbing the CSV files, they are stored as Tempfiles and deleted after parsed.
+  # Given a list of query result's, iterate through it and grab the CSV file associated with it. Then parse the CSV file
+  # line by line and generating the event object for it. Then enqueue it.
 
   public
   def enqueue_events(query_result_list, queue, client)
     @logger.info("#{LOG_KEY}: enqueue events")
 
     # Grab a list of Tempfiles that contains CSV file data.
-    tempfile_list = get_csv_tempfile_list(query_result_list, client)
+    event_log_file_records = get_event_log_file_records(query_result_list, client)
 
-    # Loop though each tempfile.
-    tempfile_list.each do |elf|
+    # Iterate though each record.
+    event_log_file_records.each do |elf|
       begin
+        # Create local variable to simplify & make code more readable.
         tmp = elf.temp_file
-        # Get the column from Tempfile, which is in the first line and in CSV format, then parse it.
-        # It will return an array.
-        column = CSV.parse_line(tmp.readline, col_sep: SEPARATOR, quote_char: QUOTE_CHAR)
+
+        # Get the schema from the first line in the tempfile. It will be in CSV format so we parse it, and it will
+        # return an array.
+        schema = CSV.parse_line(tmp.readline, col_sep: SEPARATOR, quote_char: QUOTE_CHAR)
 
         # Loop through tempfile, line by line.
         tmp.each_line do |line|
           # Parse the current line, it will return an string array.
           string_array = CSV.parse_line(line, col_sep: SEPARATOR, quote_char: QUOTE_CHAR)
 
+          # Convert the string array into its corresponding type array.
           data = string_to_type_array(string_array, elf.field_types)
+
           # create_event will return a event object.
-          queue << create_event(column, data)
+          queue << create_event(schema, data)
         end
       ensure
         # Close tmp file and unlink it, doing this will delete the actual tempfile.
@@ -59,6 +61,9 @@ class QueueUtil
 
 
 
+
+  # Convert the given string array to its corresponding type array and return it.
+
   private
   def string_to_type_array(string_array, field_types)
     data = []
@@ -69,9 +74,10 @@ class QueueUtil
           data[i] = (string_array[i].empty?) ? nil : string_array[i].to_f
         when 'Boolean'
           data[i] = (string_array[i].empty?) ? nil : (string_array[i] == '0')
-        else # 'String', 'Id', 'EscapedString', 'Set', 'IP'
+        when 'IP'
+          data[i] = (string_array[i].empty? || string_array[i] == 'N/A') ? nil : string_array[i]
+        else # 'String', 'Id', 'EscapedString', 'Set'
           data[i] = (string_array[i].empty?) ? nil : string_array[i]
-          # data << string_array[i]
       end
     end # do loop
 
@@ -79,39 +85,42 @@ class QueueUtil
   end # convert_string_to_type
 
 
-  # This helper method takes as input a key data and val data that is in CSV format. Using CSV.parse_line we will get
-  # back an array for each then one of them. Then create a new Event object where we will place all of the key value
-  # pairs into the Event object and then return it.
+
+
+  # Bases on the schema and data, we create the event object. At any point if the data is nil we simply dont add
+  # the data to the event object. Special handling is needed when the schema 'TIMESTAMP' occurs, then the data
+  # associated with it needs to be converted into a LogStash::Timestamp.
+  #
+  # Patch: Whenever USER_AGENT it in the schema I simply dont add it to the event object because right now
+  #        it's typing its not standardized to a single type.
+  #        TODO: Need a better way to handle user agent typing.
 
   private
-  def create_event(column, data) # TODO: change to schema, data
+  def create_event(schema, data)
     # Initaialize event to be used. @timestamp and @version is automatically added
     event = LogStash::Event.new
 
     # Add column data pair to event.
     data.each_index do |i|
       # Grab current key.
-      column_name = column[i]
+      schema_name = schema[i]
 
       # Handle when field_name is 'TIMESTAMP', Change the @timestamp field to the actual time on the CSV file,
       # but convert it to iso8601.
-      if column_name == 'TIMESTAMP'
+      if schema_name == 'TIMESTAMP'
         epochmillis = DateTime.parse(data[i]).to_time.to_f
         event.timestamp = LogStash::Timestamp.at(epochmillis)
       end
 
-      # Add the column data pair to event object.
-      if data[i] != nil
-        event[column_name] = data[i]
+      # Add the schema data pair to event object.
+      if data[i] != nil && schema[i] != 'USER_AGENT'
+        event[schema_name] = data[i]
       end
     end
 
     # Return the event
     event
   end # def create_event
-
-
-
 
 
 
@@ -123,11 +132,9 @@ class QueueUtil
   # After grabbing the CSV file we then store them using the standard Tempfile library. Tempfile will create a unique
   # file each time using 'sfdc_elf_tempfile' as the prefix and finally we will be returning a list of Tempfile object,
   # where the user can read the Tempfile and then close it and unlink it, which will delete the file.
-  #
-  # Note: for debugging tmp.path will help find the path where the Tempfile is stored.
 
   public
-  def get_csv_tempfile_list(query_result_list, client)
+  def get_event_log_file_records(query_result_list, client)
     @logger.info("#{LOG_KEY}: generating tempfile list")
     result = []
     query_result_list.each do |event_log_file|
@@ -142,8 +149,7 @@ class QueueUtil
       # call the Read method.
       tmp.rewind
 
-      # Append the Tempfile object into the result list
-      # result << tmp
+      # Append the EventLogFile object into the result list
       field_types = event_log_file.LogFileFieldTypes.split(',')
       result << EventLogFile.new(field_types, tmp)
 
@@ -157,5 +163,5 @@ class QueueUtil
       @logger.info('  ......................................')
     end
     result
-  end # def get_csv_files
+  end # def get_event_log_file_records
 end # QueueUtil

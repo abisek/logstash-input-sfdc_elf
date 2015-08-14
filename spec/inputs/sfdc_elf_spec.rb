@@ -18,7 +18,6 @@ describe LogStash::Inputs::SfdcElf do
         to_return(status: 200, body: fixture('org_query_response.json'), headers: {})
 
       # Stub describe query
-      # TODO: Not sure why org query calls describe query, and the decribe file is huge!!
       stub_request(:get, 'https://na1.salesforce.com/services/data/v33.0/sobjects/Organization/describe').
         with(headers: { Accept: '*/*', Authorization: 'OAuth access_token', User_Agent: 'Ruby' }).
         to_return(status: 200, body: fixture('describe.json'), headers: {})
@@ -42,7 +41,7 @@ describe LogStash::Inputs::SfdcElf do
       plugin = LogStash::Inputs::SfdcElf.new(config)
       plugin.register
       expect(plugin.path).to eq Dir.home
-      plugin.teardown # TODO: Move teardown to after block. See https://www.relishapp.com/rspec/rspec-core/v/2-2/docs/hooks/before-and-after-hooks
+      plugin.teardown
 
       # Delete the .sfdc_info_logstash file.
       File.delete(provided_path_with_file)

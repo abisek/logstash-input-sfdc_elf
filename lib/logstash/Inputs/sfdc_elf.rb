@@ -15,7 +15,6 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   config_name 'sfdc_elf'
   default :codec, 'plain'
 
-  # TODO: Publish https://www.elastic.co/guide/en/logstash/current/_how_to_write_a_logstash_input_plugin.html#_publishing_to_ulink_url_http_rubygems_org_rubygems_org_ulink?q=publish
   # Username to your Force.com organization.
   config :username, validate: :string, required: true
 
@@ -95,6 +94,7 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
       soql_expr = "SELECT Id, EventType, Logfile, LogDate, LogFileLength, LogFileFieldTypes
                    FROM EventLogFile
                    WHERE LogDate > #{@last_indexed_log_date} ORDER BY LogDate DESC "
+
 
       query_result_list = @client.retryable_query(username: @username,
                                                   password: @password.value + @security_token.value,
