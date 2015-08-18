@@ -46,7 +46,6 @@ describe Scheduler do
       # The next schedule time should be based on the start time + the interval, which would be 2:00pm.
       next_schedule_time = start_time + hour_interval
 
-      # TODO: need to make a better testcase
       # Since the start time is 1:00pm and next schedule time is 2:00pm, but the current time is 1:59:55pm, so we are
       # within the scheduled time. So then we expect to sleep for 5 seconds and the next schedule is 3:00pm.
       next_schedule_time = scheduler.stall_schedule(next_schedule_time)

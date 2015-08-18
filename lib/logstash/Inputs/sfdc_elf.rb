@@ -22,20 +22,17 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   config :password, validate: :password, required: true
 
   # Client id to your Force.com organization.
-  # TODO: make interactive gif to explain how to get client id
   config :client_id, validate: :password, required: true
 
   # Client secret to your Force.com organization.
-  # TODO: make interactive gif to explain how to get it secret
   config :client_secret, validate: :password, required: true
 
   # Version to your Force.com organization.
-  config :version, validate: :string, required: true
+  config :host, validate: :string, default: 'login.salesforce.com'
 
   # Security token to you Force.com organization, can be found in  My Settings > Personal > Reset My Security Token.
   # Then it will take you to "Reset My Security Token" page, and click on the "Reset Security Token" button. The token
   # will be emailed to you.
-  # TODO: make interactive gif to explain how to get it security token
   config :security_token, validate: :password, required: true
 
   # The path to be use to store the .sfdc_info_logstash file. You set the path like so, `~/SomeDirectory` Paths must be
@@ -43,19 +40,19 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   config :path, validate: :string, default: Dir.home
 
   # How often this plugin should grab new data.
-  config :poll_interval_in_hours, validate: [*6..24], default: 24
+  config :poll_interval_in_minutes, validate: [*1..(24 * 60)], default: (24 * 60)
 
 
   # The first part of logstash pipeline is register, where all instance variables are initialized.
 
   public
   def register
-    # Do not change id and secret. Currently pointing to "Event Log File Logstash Plugin," a long running app for this
-    # plugin.
+    # Initialize the client.
     @client = ClientWithStreamingSupport.new
     @client.client_id     = @client_id.value
     @client.client_secret = @client_secret.value
-    @client.version       = @version
+    @client.host          = @host
+    @client.version       = '33.0'
 
     # Authenticate the client
     @logger.info("#{LOG_KEY}: tyring to authenticate client")
@@ -65,11 +62,10 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
     @logger.info("#{LOG_KEY}: authenticating succeeded")
 
     # Save org id to distinguish between multiple orgs.
-    # @org_id = @client.org_id # TODO: (mo) why doesnt this work???
     @org_id = @client.query('select id from Organization')[0]['Id']
 
     # Set up time interval for forever while loop.
-    @poll_interval_in_seconds = @poll_interval_in_hours * 3600
+    @poll_interval_in_seconds = @poll_interval_in_minutes * 60
 
     # Handel the @path config passed by the user. If path does not exist then set @path to home directory.
     verify_path
@@ -101,10 +97,9 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
       @logger.info('---------------------------------------------------')
 
       # Grab a list of SObjects, specifically EventLogFiles.
-      # TODO: make it assending...
       soql_expr = "SELECT Id, EventType, Logfile, LogDate, LogFileLength, LogFileFieldTypes
                    FROM EventLogFile
-                   WHERE LogDate > #{@last_indexed_log_date} ORDER BY LogDate DESC "
+                   WHERE LogDate > #{@last_indexed_log_date} ORDER BY LogDate ASC "
 
 
       query_result_list = @client.retryable_query(username: @username,
@@ -115,9 +110,9 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
       @logger.info("#{LOG_KEY}: query result size = #{query_result_list.size}")
 
       if !query_result_list.empty?
-        # query_result_list is in descending order based on the LogDate, so grab the first one of the list and save the
+        # query_result_list is in ascending order based on the LogDate, so grab the last one of the list and save the
         # LogDate to @last_read_log_date and .sfdc_info_logstash
-        @last_indexed_log_date = query_result_list.first.LogDate.strftime('%FT%T.%LZ')
+        @last_indexed_log_date = query_result_list.last.LogDate.strftime('%FT%T.%LZ')
 
         # TODO: grab tempfiles here!!
 

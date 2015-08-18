@@ -2,6 +2,8 @@
 require 'csv'
 require 'resolv'
 
+TYPE_PREFIX = 'elf-logstash-'
+
 # Handel parsing data into event objects and then enqueue all of the events to the queue.
 class QueueUtil
   # Constants
@@ -87,6 +89,7 @@ class QueueUtil
 
 
 
+  # Check if the given ip address is truely an ip address.
 
   private
   def valid_ip(ip)
@@ -99,10 +102,6 @@ class QueueUtil
   # Bases on the schema and data, we create the event object. At any point if the data is nil we simply dont add
   # the data to the event object. Special handling is needed when the schema 'TIMESTAMP' occurs, then the data
   # associated with it needs to be converted into a LogStash::Timestamp.
-  #
-  # Patch: Whenever USER_AGENT it in the schema I simply dont add it to the event object because right now
-  #        it's typing its not standardized to a single type.
-  #        TODO: Need a better way to handle user agent typing.
 
   private
   def create_event(schema, data, event_type)
@@ -121,8 +120,9 @@ class QueueUtil
         event.timestamp = LogStash::Timestamp.at(epochmillis)
       end
 
-      # Elasticsearch can now index based on the EventType
-      event['type'] = event_type
+      # Allow Elasticsearch to be index based on the EventType & the date. This occurs in the Elasticseach output
+      # plugin, where it will look up 'type' in the event object and then assign the indexing to the 'type.'
+      event['type'] = TYPE_PREFIX + event_type.downcase + event.sprintf('-%{+YYYY-MM-dd}')
 
       # Add the schema data pair to event object.
       if data[i] != nil
