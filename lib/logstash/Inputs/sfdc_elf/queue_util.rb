@@ -1,5 +1,6 @@
 # encoding: utf-8
 require 'csv'
+require 'resolv'
 
 # Handel parsing data into event objects and then enqueue all of the events to the queue.
 class QueueUtil
@@ -10,7 +11,7 @@ class QueueUtil
 
   # Zip up the tempfile, which is a CSV file, and the field types, so that when parsing the CSV file we can accurately
   # convert each field to its respective type. Like Integers and Booleans.
-  EventLogFile = Struct.new(:field_types, :temp_file)
+  EventLogFile = Struct.new(:field_types, :temp_file, :event_type)
 
 
   def initialize
@@ -49,7 +50,7 @@ class QueueUtil
           data = string_to_type_array(string_array, elf.field_types)
 
           # create_event will return a event object.
-          queue << create_event(schema, data)
+          queue << create_event(schema, data, elf.event_type)
         end
       ensure
         # Close tmp file and unlink it, doing this will delete the actual tempfile.
@@ -75,7 +76,7 @@ class QueueUtil
         when 'Boolean'
           data[i] = (string_array[i].empty?) ? nil : (string_array[i] == '0')
         when 'IP'
-          data[i] = (string_array[i].empty? || string_array[i] == 'N/A') ? nil : string_array[i]
+          data[i] = valid_ip(string_array[i]) ? string_array[i] : nil
         else # 'String', 'Id', 'EscapedString', 'Set'
           data[i] = (string_array[i].empty?) ? nil : string_array[i]
       end
@@ -83,6 +84,14 @@ class QueueUtil
 
     data
   end # convert_string_to_type
+
+
+
+
+  private
+  def valid_ip(ip)
+    ip =~ Resolv::IPv4::Regex ? true : false
+  end
 
 
 
@@ -96,7 +105,7 @@ class QueueUtil
   #        TODO: Need a better way to handle user agent typing.
 
   private
-  def create_event(schema, data)
+  def create_event(schema, data, event_type)
     # Initaialize event to be used. @timestamp and @version is automatically added
     event = LogStash::Event.new
 
@@ -112,8 +121,11 @@ class QueueUtil
         event.timestamp = LogStash::Timestamp.at(epochmillis)
       end
 
+      # Elasticsearch can now index based on the EventType
+      event['type'] = event_type
+
       # Add the schema data pair to event object.
-      if data[i] != nil && schema[i] != 'USER_AGENT'
+      if data[i] != nil
         event[schema_name] = data[i]
       end
     end
@@ -151,7 +163,7 @@ class QueueUtil
 
       # Append the EventLogFile object into the result list
       field_types = event_log_file.LogFileFieldTypes.split(',')
-      result << EventLogFile.new(field_types, tmp)
+      result << EventLogFile.new(field_types, tmp, event_log_file.EventType)
 
       # Log the info from event_log_file object.
       @logger.info("  #{LOG_KEY}: Id = #{event_log_file.Id}")

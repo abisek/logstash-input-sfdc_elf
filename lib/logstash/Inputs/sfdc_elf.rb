@@ -21,10 +21,21 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   # Password to your Force.com organization.
   config :password, validate: :password, required: true
 
+  # Client id to your Force.com organization.
+  # TODO: make interactive gif to explain how to get client id
+  config :client_id, validate: :password, required: true
+
+  # Client secret to your Force.com organization.
+  # TODO: make interactive gif to explain how to get it secret
+  config :client_secret, validate: :password, required: true
+
+  # Version to your Force.com organization.
+  config :version, validate: :string, required: true
+
   # Security token to you Force.com organization, can be found in  My Settings > Personal > Reset My Security Token.
   # Then it will take you to "Reset My Security Token" page, and click on the "Reset Security Token" button. The token
   # will be emailed to you.
-  # TODO: make make a simple .gif that shows this process? and attach it?
+  # TODO: make interactive gif to explain how to get it security token
   config :security_token, validate: :password, required: true
 
   # The path to be use to store the .sfdc_info_logstash file. You set the path like so, `~/SomeDirectory` Paths must be
@@ -42,9 +53,9 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
     # Do not change id and secret. Currently pointing to "Event Log File Logstash Plugin," a long running app for this
     # plugin.
     @client = ClientWithStreamingSupport.new
-    @client.client_id = '3MVG9xOCXq4ID1uGlgyzp8E4HENTnwB05RL1qOmas88eMfE0mk7h0duhs3EnEY2v7Khs9aUXQnrUdB_wm.yJx'
-    @client.client_secret = '5847713965780458928'
-    @client.version = '33.0'
+    @client.client_id     = @client_id.value
+    @client.client_secret = @client_secret.value
+    @client.version       = @version
 
     # Authenticate the client
     @logger.info("#{LOG_KEY}: tyring to authenticate client")
@@ -59,7 +70,6 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
 
     # Set up time interval for forever while loop.
     @poll_interval_in_seconds = @poll_interval_in_hours * 3600
-    # @poll_interval_in_hours = 10
 
     # Handel the @path config passed by the user. If path does not exist then set @path to home directory.
     verify_path
@@ -91,6 +101,7 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
       @logger.info('---------------------------------------------------')
 
       # Grab a list of SObjects, specifically EventLogFiles.
+      # TODO: make it assending...
       soql_expr = "SELECT Id, EventType, Logfile, LogDate, LogFileLength, LogFileFieldTypes
                    FROM EventLogFile
                    WHERE LogDate > #{@last_indexed_log_date} ORDER BY LogDate DESC "
