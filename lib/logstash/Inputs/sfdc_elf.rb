@@ -27,19 +27,20 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
   # Client secret to your Force.com organization.
   config :client_secret, validate: :password, required: true
 
-  # Version to your Force.com organization.
+  # The host to use for OAuth2 authentication.
   config :host, validate: :string, default: 'login.salesforce.com'
 
+  # Only needed when your Force.com organization requires it.
   # Security token to you Force.com organization, can be found in  My Settings > Personal > Reset My Security Token.
   # Then it will take you to "Reset My Security Token" page, and click on the "Reset Security Token" button. The token
   # will be emailed to you.
-  config :security_token, validate: :password, required: true
+  config :security_token, validate: :password, default: ''
 
-  # The path to be use to store the .sfdc_info_logstash file. You set the path like so, `~/SomeDirectory` Paths must be
+  # The path to be use to store the .sfdc_info_logstash state persistor file. You set the path like so, `~/SomeDirectory` Paths must be
   # absolute and cannot be relative.
   config :path, validate: :string, default: Dir.home
 
-  # How often this plugin should grab new data.
+  # Specify how often the plugin should grab new data in terms of minutes.
   config :poll_interval_in_minutes, validate: [*1..(24 * 60)], default: (24 * 60)
 
 

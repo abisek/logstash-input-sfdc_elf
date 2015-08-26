@@ -2,7 +2,7 @@
 require 'csv'
 require 'resolv'
 
-TYPE_PREFIX = 'elf-logstash-'
+TYPE_PREFIX = 'logstash-elf-'
 
 # Handel parsing data into event objects and then enqueue all of the events to the queue.
 class QueueUtil
