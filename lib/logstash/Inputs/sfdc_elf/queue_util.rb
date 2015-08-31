@@ -2,8 +2,6 @@
 require 'csv'
 require 'resolv'
 
-TYPE_PREFIX = 'logstash-elf-'
-
 # Handel parsing data into event objects and then enqueue all of the events to the queue.
 class QueueUtil
   # Constants
@@ -120,9 +118,8 @@ class QueueUtil
         event.timestamp = LogStash::Timestamp.at(epochmillis)
       end
 
-      # Allow Elasticsearch to be index based on the EventType & the date. This occurs in the Elasticseach output
-      # plugin, where it will look up 'type' in the event object and then assign the indexing to the 'type.'
-      event['type'] = TYPE_PREFIX + event_type.downcase + event.sprintf('-%{+YYYY-MM-dd}')
+      # Allow Elasticsearch index's have to types set to EventType.
+      event['type'] = event_type.downcase
 
       # Add the schema data pair to event object.
       if data[i] != nil
