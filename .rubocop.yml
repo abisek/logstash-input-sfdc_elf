@@ -1,0 +1,41 @@
+# Must be compact, so that Logstash can locate plugins via "LogStash::inputs::YourPluginName"
+Style/ClassAndModuleChildren:
+  EnforcedStyle: compact
+
+# ABC is a metric based on the number of Assignments, Branches, and Conditions.
+# More info: http://c2.com/cgi/wiki?AbcMetric
+AbcSize:
+  Max: 25
+
+# Disable messages about using fail instead of raise for a specific try/catch block.
+SignalException:
+  Enabled: false
+
+# Disable message about providing an exception class and message as an argument to raise.
+RaiseArgs:
+  EnforcedStyle: compact
+
+Metrics/LineLength:
+  AllowURI: true
+  Max: 120
+
+Metrics/MethodLength:
+  Enabled: false
+
+Metrics/ClassLength:
+  Max: 150
+
+EmptyLines:
+  Enabled: false
+
+# Allow to have no line break between method and modifier. Example using public or private, then method.
+Style/EmptyLinesAroundAccessModifier:
+  Enabled: false
+
+# Allow to move chained dot methods to the next line.
+Style/DotPosition:
+  Enabled: false
+
+# Allow to use the word "get" in accessor method names.
+Style/AccessorMethodName:
+  Enabled: false

@@ -1,0 +1,62 @@
+{
+  "totalSize" : 0,
+  "done" : true,
+  "records" : [
+    {
+      "attributes" : {
+        "type" : "EventLogFile",
+        "url" : "/services/data/v33.0/sobjects/EventLogFile/0AT300000000Y4aGAE"
+      },
+      "Id" : "some_id",
+      "LogFile" : "/services/data/v33.0/sobjects/EventLogFile/sample_data1",
+      "LogDate" : "2015-07-23T00:00:00.000+0000",
+      "LogFileLength" : 0.0,
+      "EventType" : "ApexExecution"
+    },
+    {
+      "attributes" : {
+        "type" : "EventLogFile",
+        "url" : "/services/data/v33.0/sobjects/EventLogFile/0AT300000000Y4aGAE"
+      },
+      "Id" : "some_id",
+      "LogFile" : "/services/data/v33.0/sobjects/EventLogFile/sample_data2",
+      "LogDate" : "2015-07-23T00:00:00.000+0000",
+      "LogFileLength" : 0.0,
+      "EventType" : "BulkApi"
+    },
+    {
+      "attributes" : {
+        "type" : "EventLogFile",
+        "url" : "/services/data/v33.0/sobjects/EventLogFile/0AT300000000Y4aGAE"
+      },
+      "Id" : "some_id",
+      "LogFile" : "/services/data/v33.0/sobjects/EventLogFile/sample_data3",
+      "LogDate" : "2015-07-23T00:00:00.000+0000",
+      "LogFileLength" : 0.0,
+      "EventType" : "Login"
+    },
+    {
+      "attributes" : {
+        "type" : "EventLogFile",
+        "url" : "/services/data/v33.0/sobjects/EventLogFile/0AT300000000Y4aGAE"
+      },
+      "Id" : "some_id",
+      "LogFile" : "/services/data/v33.0/sobjects/EventLogFile/sample_data4",
+      "LogDate" : "2015-07-23T00:00:00.000+0000",
+      "LogFileLength" : 0.0,
+      "EventType" : "QueuedExecution"
+    },
+    {
+      "attributes" : {
+        "type" : "EventLogFile",
+        "url" : "/services/data/v33.0/sobjects/EventLogFile/0AT300000000Y4aGAE"
+      },
+      "Id" : "some_id",
+      "LogFile" : "/services/data/v33.0/sobjects/EventLogFile/sample_data5",
+      "LogDate" : "2015-07-23T00:00:00.000+0000",
+      "LogFileLength" : 0.0,
+      "EventType" : "RestApi"
+    }
+  ]
+  }
+

@@ -1,0 +1,19 @@
+{
+  "totalSize" : 0,
+  "done" : true,
+  "records" : [
+    {
+      "attributes" : {
+        "type" : "EventLogFile",
+        "url" : "/services/data/v33.0/sobjects/EventLogFile/0AT300000000Y4aGAE"
+      },
+      "Id" : "some_id",
+      "LogFile" : "/services/data/v33.0/sobjects/EventLogFile/create_event_sampledata1",
+      "LogDate" : "2015-07-23T00:00:00.000+0000",
+      "LogFileFieldTypes" : "String,String,String,Id,Id,String,String,Id,EscapedString,String,String,String,String,EscapedString,String,String,String,String,String,EscapedString,String,EscapedString,IP,EscapedString,EscapedString,String,Id,EscapedString,EscapedString,Number,Number,Boolean,String,String,Number,String,Number,Number,String,Number,Number,Number",
+      "LogFileLength" : 0.0,
+      "EventType" : "UITracking"
+    }
+  ]
+}
+
