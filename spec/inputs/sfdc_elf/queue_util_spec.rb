@@ -172,7 +172,5 @@ describe QueueUtil do
         tmp.unlink
       end # do loop
     end
-
-    # TODO: test token expires when trying to do streaming download
   end # get_csv_tempfile_list
 end # describe SfdcElf
