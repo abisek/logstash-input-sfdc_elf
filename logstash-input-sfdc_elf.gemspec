@@ -6,7 +6,7 @@ Gem::Specification.new do |s|
   s.description     = 'This gem is a logstash plugin required to be installed on top of the Logstash core pipeline
                        using $LS_HOME/bin/plugin install gemname. This gem is not a stand-alone program'
   s.authors         = ['Abhishek Sreenivasa', 'Mohammed Islam']
-  s.email           = %w(abisek@gmail.com mislam@salesforce.com)
+  s.email           = %w(asreenivasa@salesforce.com mislam@salesforce.com)
   s.homepage        = 'http://www.salesforce.com'
   s.require_paths   = ['lib']
 
