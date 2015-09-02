@@ -1,7 +1,7 @@
 Gem::Specification.new do |s|
   s.name            = 'logstash-input-sfdc_elf'
   s.version         = '0.0.1'
-  s.licenses        = ['MIT'] # TODO(abisek) Discuss license type with legal
+  s.licenses        = ['Salesforce EULA']
   s.summary         = 'A Logstash plugin the receives events from Salesforce EventLogFile'
   s.description     = 'This gem is a logstash plugin required to be installed on top of the Logstash core pipeline
                        using $LS_HOME/bin/plugin install gemname. This gem is not a stand-alone program'
