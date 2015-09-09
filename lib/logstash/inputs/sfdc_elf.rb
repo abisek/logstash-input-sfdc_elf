@@ -126,9 +126,6 @@ class LogStash::Inputs::SfdcElf < LogStash::Inputs::Base
 
         # Creates events from query_result_list, then simply append the events to the queue.
         @queue_util.enqueue_events(query_result_list, queue, @client)
-      else
-        # Make sure to save the last read LogDate even when query_result_list is empty
-        @state_persistor.update_last_indexed_log_date(DateTime.now.new_offset(0).strftime('%FT%T.%LZ'))
       end
     end # do loop
   end # def run
